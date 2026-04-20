@@ -9,268 +9,70 @@
   <meta name="theme-color" content="#0f0f0f">
   <title>DAB Radio</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
     :root {
-      --bg: #0f0f0f;
-      --bg2: #1a1a1a;
-      --bg3: #252525;
-      --border: rgba(255,255,255,0.1);
-      --border2: rgba(255,255,255,0.18);
-      --text: #f0f0f0;
-      --text2: #999;
-      --text3: #666;
-      --accent: #1D9E75;
-      --accent2: #534AB7;
-      --radius: 10px;
-      --radius-lg: 14px;
+      --bg:#0f0f0f; --bg2:#1a1a1a; --bg3:#252525;
+      --border:rgba(255,255,255,0.1); --border2:rgba(255,255,255,0.2);
+      --text:#f0f0f0; --text2:#999; --text3:#555;
+      --accent:#1D9E75; --accent2:#534AB7;
+      --radius:12px; --radius-lg:16px;
     }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      padding: 0;
-    }
-    #app {
-      max-width: 760px;
-      margin: 0 auto;
-      padding: 1.25rem 1rem 5rem;
-    }
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1.25rem;
-    }
-    .header h1 {
-      font-size: 22px;
-      font-weight: 600;
-      letter-spacing: -0.5px;
-    }
-    #status-txt {
-      font-size: 12px;
-      color: var(--text2);
-    }
-    .now-playing {
-      background: var(--bg2);
-      border-radius: var(--radius-lg);
-      border: 0.5px solid var(--border);
-      padding: 1rem 1.25rem;
-      margin-bottom: 1.5rem;
-    }
-    .np-label {
-      font-size: 11px;
-      color: var(--text3);
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      margin-bottom: 6px;
-    }
-    .np-station {
-      font-size: 20px;
-      font-weight: 600;
-      margin-bottom: 3px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .np-meta {
-      font-size: 13px;
-      color: var(--text2);
-      margin-bottom: 14px;
-    }
-    .controls {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-    .play-btn {
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      border: 0.5px solid var(--border2);
-      background: var(--bg3);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      transition: background 0.15s;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .play-btn:active { background: #333; }
-    .play-btn svg { width: 20px; height: 20px; fill: var(--text); }
-    .vol-wrap {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex: 1;
-    }
-    .vol-icon { font-size: 16px; color: var(--text2); }
-    input[type=range] {
-      -webkit-appearance: none;
-      appearance: none;
-      flex: 1;
-      height: 4px;
-      border-radius: 2px;
-      background: var(--bg3);
-      outline: none;
-      cursor: pointer;
-    }
-    input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: var(--text);
-      cursor: pointer;
-    }
-    input[type=range]::-moz-range-thumb {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: var(--text);
-      border: none;
-      cursor: pointer;
-    }
-    .vol-out { font-size: 12px; color: var(--text2); min-width: 28px; text-align: right; }
-    .pulse {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--accent);
-      animation: pulse 1.2s ease-in-out infinite;
-      flex-shrink: 0;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.35; transform: scale(0.65); }
-    }
-    .section-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text3);
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      margin: 1.25rem 0 0.6rem;
-    }
-    .presets {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-bottom: 1.5rem;
-    }
-    .preset-slot {
-      width: 52px;
-      height: 52px;
-      border-radius: var(--radius);
-      border: 0.5px solid var(--border);
-      background: var(--bg2);
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      color: var(--text3);
-      line-height: 1.3;
-      padding: 4px;
-      text-align: center;
-      transition: background 0.15s;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .preset-slot.filled {
-      color: var(--text);
-      font-weight: 500;
-      border-color: var(--accent2);
-    }
-    .preset-slot:active { background: var(--bg3); }
-    .search-wrap { margin-bottom: 1rem; }
-    .search-wrap input {
-      width: 100%;
-      padding: 10px 14px;
-      border-radius: var(--radius);
-      border: 0.5px solid var(--border);
-      background: var(--bg2);
-      font-size: 15px;
-      color: var(--text);
-      outline: none;
-    }
-    .search-wrap input::placeholder { color: var(--text3); }
-    .search-wrap input:focus { border-color: var(--border2); }
-    .tabs {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-    }
-    .tab {
-      padding: 7px 16px;
-      border-radius: 20px;
-      border: 0.5px solid var(--border);
-      background: var(--bg2);
-      cursor: pointer;
-      font-size: 13px;
-      color: var(--text2);
-      transition: all 0.15s;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .tab.active {
-      background: var(--bg3);
-      color: var(--text);
-      border-color: var(--border2);
-      font-weight: 500;
-    }
-    .country-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text3);
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      margin: 1.25rem 0 0.6rem;
-    }
-    .station-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
-      gap: 8px;
-      margin-bottom: 0.5rem;
-    }
-    .station-card {
-      background: var(--bg2);
-      border: 0.5px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 12px 10px;
-      cursor: pointer;
-      transition: border-color 0.15s, background 0.15s;
-      position: relative;
-      -webkit-tap-highlight-color: transparent;
-      min-height: 72px;
-    }
-    .station-card:active { background: var(--bg3); }
-    .station-card.active { border-color: var(--accent); background: var(--bg3); }
-    .station-card.fav-active { border-color: var(--accent2); }
-    .s-flag { font-size: 15px; margin-bottom: 5px; }
-    .s-name { font-size: 13px; font-weight: 500; line-height: 1.3; color: var(--text); padding-right: 18px; }
-    .s-genre { font-size: 11px; color: var(--text2); margin-top: 3px; }
-    .fav-btn {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 15px;
-      opacity: 0.3;
-      transition: opacity 0.15s;
-      padding: 0;
-      color: var(--text);
-      -webkit-tap-highlight-color: transparent;
-    }
-    .fav-btn.on { opacity: 1; color: #f0c040; }
-    .empty { padding: 1.5rem 0; font-size: 14px; color: var(--text2); }
-    @media (max-width: 480px) {
-      .station-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-      .np-station { font-size: 17px; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    #app { max-width:680px; margin:0 auto; padding:1.5rem 1rem 4rem; }
+
+    /* Header */
+    .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+    .header h1 { font-size:24px; font-weight:700; letter-spacing:-0.5px; }
+    #status-txt { font-size:12px; color:var(--text2); }
+
+    /* Now playing */
+    .now-playing { background:var(--bg2); border-radius:var(--radius-lg); border:0.5px solid var(--border); padding:1.25rem; margin-bottom:2rem; }
+    .np-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px; }
+    .np-station { font-size:22px; font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:10px; }
+    .np-meta { font-size:13px; color:var(--text2); margin-bottom:1rem; }
+    .controls { display:flex; align-items:center; gap:16px; }
+    .play-btn { width:56px; height:56px; border-radius:50%; border:0.5px solid var(--border2); background:var(--bg3); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; -webkit-tap-highlight-color:transparent; }
+    .play-btn:active { background:#333; }
+    .play-btn svg { width:24px; height:24px; fill:var(--text); }
+    .vol-wrap { display:flex; align-items:center; gap:10px; flex:1; }
+    input[type=range] { -webkit-appearance:none; appearance:none; flex:1; height:4px; border-radius:2px; background:var(--bg3); outline:none; cursor:pointer; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--text); cursor:pointer; }
+    input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%; background:var(--text); border:none; cursor:pointer; }
+    .vol-out { font-size:12px; color:var(--text2); min-width:28px; text-align:right; }
+    .pulse { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--accent); animation:pulse 1.2s ease-in-out infinite; flex-shrink:0; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.6)} }
+
+    /* Country sections */
+    .country-section { margin-bottom:2rem; }
+    .country-heading { display:flex; align-items:center; gap:8px; margin-bottom:0.75rem; }
+    .country-heading span { font-size:13px; font-weight:600; color:var(--text2); text-transform:uppercase; letter-spacing:0.07em; }
+
+    /* Station cards — large for CarPlay */
+    .station-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
+    .station-card { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:18px 16px 14px; cursor:pointer; transition:border-color 0.15s,background 0.15s; position:relative; min-height:90px; -webkit-tap-highlight-color:transparent; display:flex; flex-direction:column; justify-content:space-between; }
+    .station-card:active { background:var(--bg3); }
+    .station-card.active { border-color:var(--accent); background:var(--bg3); }
+    .s-name { font-size:15px; font-weight:600; line-height:1.3; color:var(--text); }
+    .s-genre { font-size:12px; color:var(--text2); margin-top:6px; }
+    .s-flag { font-size:18px; margin-bottom:8px; }
+
+    /* Sanef geo banner */
+    .sanef-banner { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:12px 14px; margin-bottom:1rem; display:flex; align-items:flex-start; gap:10px; }
+    .sanef-icon { font-size:20px; flex-shrink:0; margin-top:1px; }
+    .sanef-info { flex:1; }
+    .sanef-title { font-size:13px; font-weight:600; color:var(--text); }
+    .sanef-sub { font-size:12px; color:var(--text2); margin-top:2px; }
+    .sanef-btn { font-size:12px; padding:6px 12px; border-radius:8px; border:0.5px solid var(--border2); background:transparent; color:var(--text); cursor:pointer; flex-shrink:0; margin-top:2px; -webkit-tap-highlight-color:transparent; }
+    .sanef-btn:active { background:var(--bg3); }
+
+    .loading { padding:3rem 0; text-align:center; color:var(--text2); font-size:14px; }
+    .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--text3); margin:0 3px; animation:ldot 1.2s ease-in-out infinite; }
+    .dot:nth-child(2){animation-delay:0.2s} .dot:nth-child(3){animation-delay:0.4s}
+    @keyframes ldot{0%,80%,100%{transform:scale(0.6);opacity:0.4}40%{transform:scale(1);opacity:1}}
+
+    @media(max-width:420px){
+      .station-grid { grid-template-columns:1fr 1fr; }
+      .s-name { font-size:14px; }
     }
   </style>
 </head>
@@ -278,209 +80,252 @@
 <div id="app">
   <div class="header">
     <h1>&#128251; Radio</h1>
-    <span id="status-txt">Ready</span>
+    <span id="status-txt">Loading...</span>
   </div>
 
   <div class="now-playing">
     <div class="np-label">Now playing</div>
     <div class="np-station" id="np-station">Select a station</div>
-    <div class="np-meta" id="np-meta">Choose from the list below</div>
+    <div class="np-meta" id="np-meta">Loading stations...</div>
     <div class="controls">
-      <button class="play-btn" id="play-btn" onclick="togglePlay()" aria-label="Play / Pause">
+      <button class="play-btn" onclick="togglePlay()" aria-label="Play / Pause">
         <svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
       </button>
       <div class="vol-wrap">
-        <span class="vol-icon">&#128266;</span>
-        <input type="range" min="0" max="100" value="80" step="1" id="vol" oninput="setVol(this.value)" aria-label="Volume">
+        <span style="font-size:16px;color:var(--text2)">&#128266;</span>
+        <input type="range" min="0" max="100" value="80" step="1" id="vol" oninput="setVol(this.value)">
         <span class="vol-out" id="vol-out">80</span>
       </div>
     </div>
   </div>
 
-  <div class="section-label">Presets</div>
-  <div class="presets" id="presets"></div>
-
-  <div class="search-wrap">
-    <input type="text" placeholder="Search stations..." id="search" oninput="renderStations()" aria-label="Search stations">
-  </div>
-
-  <div class="tabs" id="tabs"></div>
-  <div id="station-list"></div>
+  <div id="main-list"></div>
 </div>
-
 <audio id="audio" preload="none"></audio>
-
 <script>
-const STATIONS = [
-  // UK
-  {id:'bbcr1',   name:'BBC Radio 1',      country:'UK', genre:'Pop / Chart',       stream:'https://stream.live.vc.bbcmedia.co.uk/bbc_radio_one'},
-  {id:'bbcr2',   name:'BBC Radio 2',      country:'UK', genre:'Easy Listening',    stream:'https://stream.live.vc.bbcmedia.co.uk/bbc_radio_two'},
-  {id:'bbcr3',   name:'BBC Radio 3',      country:'UK', genre:'Classical',         stream:'https://stream.live.vc.bbcmedia.co.uk/bbc_radio_three'},
-  {id:'bbcr4',   name:'BBC Radio 4',      country:'UK', genre:'Talk / News',       stream:'https://stream.live.vc.bbcmedia.co.uk/bbc_radio_four_fm'},
-  {id:'bbc5l',   name:'BBC Radio 5 Live', country:'UK', genre:'Sport / News',      stream:'https://stream.live.vc.bbcmedia.co.uk/bbc_radio_five_live'},
-  {id:'bbc6',    name:'BBC 6 Music',      country:'UK', genre:'Alternative',       stream:'https://stream.live.vc.bbcmedia.co.uk/bbc_6music'},
-  {id:'bbc1x',   name:'BBC 1Xtra',        country:'UK', genre:'R&B / Hip-Hop',     stream:'https://stream.live.vc.bbcmedia.co.uk/bbc_1xtra'},
-  {id:'capital', name:'Capital FM',       country:'UK', genre:'Pop',               stream:'https://media-ice.musicradio.com/CapitalMP3'},
-  {id:'capitalx',name:'Capital XTRA',     country:'UK', genre:'Hip-Hop / R&B',     stream:'https://media-ice.musicradio.com/CapitalXTRAMP3'},
-  {id:'heart',   name:'Heart',            country:'UK', genre:'Easy Listening',    stream:'https://media-ice.musicradio.com/HeartMP3'},
-  {id:'kiss',    name:'Kiss FM',          country:'UK', genre:'Dance / Electronic',stream:'https://icecast.thisisdax.com/KissFMMP3'},
-  {id:'absolute',name:'Absolute Radio',   country:'UK', genre:'Rock',              stream:'https://media-ice.musicradio.com/AbsoluteRadioMP3'},
-  {id:'abs80s',  name:'Absolute 80s',     country:'UK', genre:'80s Rock',          stream:'https://media-ice.musicradio.com/Absolute80sMP3'},
-  {id:'clsrock', name:'Classic Rock',     country:'UK', genre:'Classic Rock',      stream:'https://icecast.thisisdax.com/ClassicRockMP3'},
-  {id:'planet',  name:'Planet Rock',      country:'UK', genre:'Rock',              stream:'https://media-ice.musicradio.com/PlanetRockMP3'},
-  {id:'kerrang', name:'Kerrang!',         country:'UK', genre:'Hard Rock / Metal', stream:'https://icecast.thisisdax.com/KerrangMP3'},
-  {id:'tsport',  name:'talkSPORT',        country:'UK', genre:'Sport',             stream:'https://stream.talksport.com/radio/5eb49550db2e420f9d52f45c/ts-mp3'},
-  {id:'lbc',     name:'LBC',             country:'UK', genre:'Talk',              stream:'https://media-ice.musicradio.com/LBCUKMP3'},
-  {id:'magic',   name:'Magic Radio',      country:'UK', genre:'Pop Classics',      stream:'https://media-ice.musicradio.com/MagicMP3'},
-  // France
-  {id:'finter',  name:'France Inter',     country:'FR', genre:'Talk / Culture',    stream:'https://icecast.radiofrance.fr/franceinter-midfi.mp3'},
-  {id:'finfo',   name:'France Info',      country:'FR', genre:'News',              stream:'https://icecast.radiofrance.fr/franceinfo-midfi.mp3'},
-  {id:'fculture',name:'France Culture',   country:'FR', genre:'Culture',           stream:'https://icecast.radiofrance.fr/franceculture-midfi.mp3'},
-  {id:'fmusique',name:'France Musique',   country:'FR', genre:'Classical / Jazz',  stream:'https://icecast.radiofrance.fr/francemusique-midfi.mp3'},
-  {id:'nrj',     name:'NRJ',             country:'FR', genre:'Pop / Dance',       stream:'https://scdn.nrj.fr/nrj_128.mp3'},
-  {id:'rtl',     name:'RTL',             country:'FR', genre:'Talk / Pop',        stream:'https://streaming.radio.rtl.fr/rtl-1-44-128'},
-  {id:'europe1', name:'Europe 1',         country:'FR', genre:'Talk / News',       stream:'https://europe1.lmn.fm/europe1.mp3'},
-  {id:'rfm',     name:'RFM',             country:'FR', genre:'Easy Listening',    stream:'https://rfm.lmn.fm/rfm.mp3'},
-  {id:'nostalgie',name:'Nostalgie',       country:'FR', genre:'French Classics',   stream:'https://nostalgie.lmn.fm/nostalgie.mp3'},
-  {id:'sanef1',  name:'Sanef A1',         country:'FR', genre:'Motorway Info',     stream:'https://www.autoroutes.fr/medias/audio/a1.mp3'},
-  {id:'sanef6',  name:'Sanef A6',         country:'FR', genre:'Motorway Info',     stream:'https://www.autoroutes.fr/medias/audio/a6.mp3'},
-  // Italy
-  {id:'rai1',    name:'RAI Radio 1',      country:'IT', genre:'Talk / News',       stream:'https://icestreaming.rai.it/1.mp3'},
-  {id:'rai2',    name:'RAI Radio 2',      country:'IT', genre:'Pop / Music',       stream:'https://icestreaming.rai.it/2.mp3'},
-  {id:'rai3',    name:'RAI Radio 3',      country:'IT', genre:'Culture / Classical',stream:'https://icestreaming.rai.it/3.mp3'},
-  {id:'deejay',  name:'Radio DeeJay',     country:'IT', genre:'Pop / Dance',       stream:'https://radiodeejay-lh.akamaihd.net/i/RadioDeejay_Live_1@189857/master.m3u8'},
-  {id:'capitalit',name:'Radio Capital IT',country:'IT', genre:'Rock / Alternative',stream:'https://radiocapital-lh.akamaihd.net/i/RadioCapital_Live_1@196312/master.m3u8'},
-  {id:'rtlit',   name:'RTL 102.5',        country:'IT', genre:'Pop',               stream:'https://rtl1025.ice.infomaniak.ch/rtl1025-128.mp3'},
-  {id:'rds',     name:'RDS',             country:'IT', genre:'Pop / Chart',       stream:'https://rdsradio.ice.infomaniak.ch/rdsradio-128.mp3'},
-  {id:'radio24', name:'Radio 24',         country:'IT', genre:'Talk / Finance',    stream:'https://icecast.unitedradio.it/Radio24.mp3'},
-  {id:'m2o',     name:'m2o',             country:'IT', genre:'Electronic / Dance',stream:'https://m2oradio.ice.infomaniak.ch/m2oradio-128.mp3'},
-  // Brazil
-  {id:'globo',   name:'Rádio Globo',      country:'BR', genre:'Talk / News',       stream:'https://stream.gloconet.com.br/radioglobo/radioglobo128.mp3'},
-  {id:'cbn',     name:'CBN',             country:'BR', genre:'News / Talk',       stream:'https://playerservices.streamtheworld.com/api/livestream-redirect/CBN_NACIONAL.mp3'},
-  {id:'bandnews',name:'Band News FM',     country:'BR', genre:'News',              stream:'https://playerservices.streamtheworld.com/api/livestream-redirect/BAND_NEWS_FM_SP.mp3'},
-  {id:'jovem',   name:'Jovem Pan',        country:'BR', genre:'Talk / News',       stream:'https://playerservices.streamtheworld.com/api/livestream-redirect/JOVEM_PAN_NEWS.mp3'},
-  {id:'antena1', name:'Antena 1',         country:'BR', genre:'Pop Classics',      stream:'https://playerservices.streamtheworld.com/api/livestream-redirect/ANTENA1_SP.mp3'},
-  {id:'89fm',    name:'89 FM',            country:'BR', genre:'Rock',              stream:'https://playerservices.streamtheworld.com/api/livestream-redirect/RADIO89FM.mp3'},
-  {id:'nacional',name:'Rádio Nacional',   country:'BR', genre:'MPB / Samba',       stream:'https://radios.ebc.com.br/radisnacional/playlist.m3u8'},
-  {id:'cidade',  name:'Rádio Cidade',     country:'BR', genre:'Pop / Hits',        stream:'https://radiocidade.fm/player/'}
+// ── Curated station list ──────────────────────────────────────────────
+// Radio Browser search names → matched by API
+const WANTED = [
+  { key:'radiox',    country:'GB', label:'Radio X',        search:'Radio X',          genre:'Rock / Alternative' },
+  { key:'talksport', country:'GB', label:'talkSPORT',      search:'talkSPORT',        genre:'Sport' },
+  { key:'capital',   country:'GB', label:'Capital FM',     search:'Capital FM',       genre:'Pop' },
+  { key:'planet',    country:'GB', label:'Planet Rock',    search:'Planet Rock',      genre:'Rock' },
+  { key:'absrock',   country:'GB', label:'Absolute Radio', search:'Absolute Radio',   genre:'Rock' },
+  { key:'cidade',    country:'BR', label:'Rádio Cidade',   search:'Radio Cidade',     genre:'Pop / Hits' },
 ];
 
-const COUNTRIES = ['All','UK','FR','IT','BR'];
-const FLAGS = {UK:'🇬🇧', FR:'🇫🇷', IT:'🇮🇹', BR:'🇧🇷'};
-const COUNTRY_NAMES = {UK:'United Kingdom', FR:'France', IT:'Italy', BR:'Brazil'};
+// Sanef 107.7 — 2 streams (since Aug 2022 restructure):
+// "Régions" covers Nord/Est/Ouest motorways; "IDF" covers Paris & Île-de-France
+// Streams: confirmed working HTTPS from infomaniak CDN
+// Geo boxes: [minLat, maxLat, minLon, maxLon]
+const SANEF_STATIONS = [
+  { key:'sanef-idf',
+    label:'Sanef 107.7',
+    sub:'Paris & Île-de-France (DAB+)',
+    stream:'https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3',
+    box:[48.1, 49.2, 1.4, 3.6] },
+  { key:'sanef-regions',
+    label:'Sanef 107.7 ',
+    sub:'Nord, Est & Ouest motorways',
+    stream:'https://sanef.ice.infomaniak.ch/sanef1077-regions.mp3',
+    box:[47.0, 51.1, -1.8, 8.0] },
+];
 
+const FLAGS = { GB:'🇬🇧', FR:'🇫🇷', BR:'🇧🇷' };
+const COUNTRY_NAMES = { GB:'United Kingdom', FR:'France — Motorway', BR:'Brazil' };
+
+let resolvedStations = []; // [{key, country, label, genre, stream, uuid}]
 let currentStation = null;
 let isPlaying = false;
-let favourites = JSON.parse(localStorage.getItem('radio-favs') || '[]');
-let presets = JSON.parse(localStorage.getItem('radio-presets') || 'Array(8).fill(null)');
-if (!Array.isArray(presets) || presets.length < 8) presets = new Array(8).fill(null);
-let activeTab = 'All';
+let geoStation = null; // auto-detected Sanef station
 
 const audio = document.getElementById('audio');
 audio.volume = 0.8;
 
-function save() {
-  localStorage.setItem('radio-favs', JSON.stringify(favourites));
-  localStorage.setItem('radio-presets', JSON.stringify(presets));
+function setStatus(txt, err) {
+  const el = document.getElementById('status-txt');
+  el.textContent = txt;
+  el.style.color = err ? '#E24B4A' : 'var(--text2)';
 }
 
-function renderTabs() {
-  document.getElementById('tabs').innerHTML = COUNTRIES.map(c =>
-    `<button class="tab${activeTab===c?' active':''}" onclick="setTab('${c}')">${c==='All'?'All':FLAGS[c]+' '+c}</button>`
-  ).join('');
+// ── Radio Browser lookup ──────────────────────────────────────────────
+async function resolveStation(w) {
+  try {
+    const cc = w.country === 'GB' ? 'GB' : w.country;
+    const url = `https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(w.search)}&countrycode=${cc}&limit=10&hidebroken=true&order=votes&reverse=true`;
+    const r = await fetch(url, { headers:{'User-Agent':'DABRadioApp/1.0'} });
+    const data = await r.json();
+    const match = data.find(s => s.url_resolved && s.url_resolved.startsWith('https'))
+                || data.find(s => s.url_resolved);
+    if (match) return { ...w, stream: match.url_resolved, uuid: match.stationuuid };
+  } catch(e) {}
+  return null;
 }
 
-function setTab(t) { activeTab = t; renderStations(); }
-
-function renderPresets() {
-  document.getElementById('presets').innerHTML = presets.map((p, i) => {
-    if (p) {
-      const s = STATIONS.find(x => x.id === p);
-      if (!s) return `<button class="preset-slot" title="Empty">P${i+1}</button>`;
-      return `<button class="preset-slot filled" title="${s.name}" onclick="playById('${p}')">${FLAGS[s.country]}<br>${s.name.split(' ')[0]}</button>`;
-    }
-    return `<button class="preset-slot" title="Empty preset ${i+1}">P${i+1}</button>`;
-  }).join('');
+async function loadStations() {
+  document.getElementById('main-list').innerHTML = `<div class="loading"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
+  const results = await Promise.all(WANTED.map(resolveStation));
+  resolvedStations = results.filter(Boolean);
+  // Sanef streams are hardcoded — no lookup needed
+  setStatus('Ready');
+  document.getElementById('np-meta').textContent = 'Choose a station below';
+  tryGeolocation();
+  render();
 }
 
-function renderStations() {
-  const q = document.getElementById('search').value.toLowerCase();
-  let list = STATIONS;
-  if (activeTab !== 'All') list = list.filter(s => s.country === activeTab);
-  if (q) list = list.filter(s => s.name.toLowerCase().includes(q) || s.genre.toLowerCase().includes(q));
+// ── Geolocation for Sanef ─────────────────────────────────────────────
+function tryGeolocation() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(pos => {
+    const { latitude: lat, longitude: lon } = pos.coords;
+    const match = SANEF_STATIONS.find(s =>
+      lat >= s.box[0] && lat <= s.box[1] && lon >= s.box[2] && lon <= s.box[3]
+    );
+    const prev = geoStation ? geoStation.key : null;
+    geoStation = match || null;
+    if ((match ? match.key : null) !== prev) render();
+  }, null, { enableHighAccuracy: false, maximumAge: 60000, timeout: 10000 });
+}
 
+function requestGeo() {
+  if (!navigator.geolocation) { setStatus('Geolocation not supported', true); return; }
+  setStatus('Getting location...');
+  navigator.geolocation.getCurrentPosition(pos => {
+    const { latitude: lat, longitude: lon } = pos.coords;
+    const match = SANEF_STATIONS.find(s =>
+      lat >= s.box[0] && lat <= s.box[1] && lon >= s.box[2] && lon <= s.box[3]
+    );
+    geoStation = match || null;
+    setStatus(match ? 'Motorway detected' : 'No motorway detected');
+    render();
+  }, () => setStatus('Location denied', true));
+}
+
+// ── Render ─────────────────────────────────────────────────────────────
+function render() {
   const byCountry = {};
-  list.forEach(s => {
+  resolvedStations.forEach(s => {
     if (!byCountry[s.country]) byCountry[s.country] = [];
     byCountry[s.country].push(s);
   });
 
   let html = '';
-  Object.keys(byCountry).forEach(c => {
-    const stations = byCountry[c];
-    if (!stations.length) return;
-    if (activeTab === 'All') html += `<div class="country-label">${FLAGS[c]} ${COUNTRY_NAMES[c]}</div>`;
-    html += `<div class="station-grid">`;
-    stations.forEach(s => {
-      const isFav = favourites.includes(s.id);
-      const isActive = currentStation && currentStation.id === s.id;
-      html += `<div class="station-card${isActive?' active':''}${isFav&&!isActive?' fav-active':''}" onclick="playStation('${s.id}')">
-        <button class="fav-btn${isFav?' on':''}" onclick="event.stopPropagation();toggleFav('${s.id}')" aria-label="${isFav?'Remove':'Add'} favourite">&#9733;</button>
-        <div class="s-flag">${FLAGS[s.country]}</div>
-        <div class="s-name">${s.name}</div>
-        <div class="s-genre">${s.genre}</div>
-      </div>`;
-    });
-    html += `</div>`;
+
+  // UK
+  if (byCountry['GB']) {
+    html += countrySection('GB', byCountry['GB']);
+  }
+
+  // France — Sanef
+  html += `<div class="country-section">`;
+  html += `<div class="country-heading"><span style="font-size:20px">${FLAGS['FR']}</span><span>${COUNTRY_NAMES['FR']}</span></div>`;
+
+  // Geo banner
+  if (geoStation) {
+    html += `<div class="sanef-banner">
+      <span class="sanef-icon">&#128652;</span>
+      <div class="sanef-info">
+        <div class="sanef-title">Auto-detected: ${geoStation.label}</div>
+        <div class="sanef-sub">${geoStation.sub}</div>
+      </div>
+      <button class="sanef-btn" onclick="playManual(${JSON.stringify(geoStation).replace(/"/g,'&quot;')})">Play</button>
+    </div>`;
+  } else {
+    html += `<div class="sanef-banner">
+      <span class="sanef-icon">&#128205;</span>
+      <div class="sanef-info">
+        <div class="sanef-title">Motorway auto-detect</div>
+        <div class="sanef-sub">${geoStation === null ? 'Not on a Sanef motorway' : 'Tap to enable location'}</div>
+      </div>
+      <button class="sanef-btn" onclick="requestGeo()">Locate</button>
+    </div>`;
+  }
+
+  // All Sanef stations as cards
+  html += `<div class="station-grid">`;
+  SANEF_STATIONS.forEach(s => {
+    const isActive = currentStation && currentStation.key === s.key;
+    const isGeo = geoStation && geoStation.key === s.key;
+    html += `<div class="station-card${isActive?' active':''}" onclick="playManual(${JSON.stringify(s).replace(/"/g,'&quot;')})" style="${isGeo?'border-color:#1D9E75;':''}" >
+      <div>
+        <div class="s-flag">🛣️</div>
+        <div class="s-name">${s.label}</div>
+      </div>
+      <div class="s-genre">${s.sub}</div>
+    </div>`;
   });
-  if (!html) html = `<p class="empty">No stations found</p>`;
-  document.getElementById('station-list').innerHTML = html;
+  html += `</div></div>`;
+
+  // Brazil
+  if (byCountry['BR']) {
+    html += countrySection('BR', byCountry['BR']);
+  }
+
+  document.getElementById('main-list').innerHTML = html;
 }
 
-function playById(id) {
-  const s = STATIONS.find(x => x.id === id);
-  if (s) playStation(id);
+function countrySection(cc, stations) {
+  let html = `<div class="country-section">`;
+  html += `<div class="country-heading"><span style="font-size:20px">${FLAGS[cc]}</span><span>${COUNTRY_NAMES[cc]||cc}</span></div>`;
+  html += `<div class="station-grid">`;
+  stations.forEach(s => {
+    const isActive = currentStation && currentStation.key === s.key;
+    html += `<div class="station-card${isActive?' active':''}" onclick="playResolved('${s.key}')">
+      <div>
+        <div class="s-flag">${FLAGS[cc]}</div>
+        <div class="s-name">${s.label}</div>
+      </div>
+      <div class="s-genre">${s.genre}</div>
+    </div>`;
+  });
+  html += `</div></div>`;
+  return html;
 }
 
-function playStation(id) {
-  const s = STATIONS.find(x => x.id === id);
-  if (!s) return;
+// ── Playback ───────────────────────────────────────────────────────────
+function playResolved(key) {
+  const s = resolvedStations.find(x => x.key === key);
+  if (s) startPlay({ key: s.key, label: s.label, country: s.country, genre: s.genre, stream: s.stream });
+}
+
+function playManual(s) {
+  startPlay({ key: s.key, label: s.label, country: s.country || 'FR', genre: s.sub || 'Motorway', stream: s.stream });
+}
+
+function startPlay(s) {
   currentStation = s;
-  document.getElementById('np-station').innerHTML =
-    `${FLAGS[s.country]} ${s.name} <span class="pulse" id="pulse" style="display:none"></span>`;
+  const flag = FLAGS[s.country] || '';
+  document.getElementById('np-station').innerHTML = `${flag} ${s.label} <span class="pulse" id="pulse" style="display:none"></span>`;
   document.getElementById('np-meta').textContent = s.genre;
-  document.getElementById('status-txt').textContent = 'Connecting...';
+  setStatus('Connecting...');
+  audio.pause();
   audio.src = s.stream;
   audio.load();
   audio.play().then(() => {
     isPlaying = true;
-    document.getElementById('pulse').style.display = 'inline-block';
-    document.getElementById('status-txt').textContent = 'Live';
+    const p = document.getElementById('pulse'); if (p) p.style.display = 'inline-block';
+    setStatus('Live');
     updatePlayBtn();
   }).catch(() => {
-    document.getElementById('status-txt').textContent = 'Stream unavailable';
-    document.getElementById('np-meta').textContent = s.genre + ' — try again or check stream';
-    isPlaying = false;
-    updatePlayBtn();
+    setStatus('Stream unavailable', true);
+    document.getElementById('np-meta').textContent = s.genre + ' — could not connect';
+    isPlaying = false; updatePlayBtn();
   });
-  renderStations();
+  render();
 }
 
 function togglePlay() {
-  if (!currentStation) { document.getElementById('status-txt').textContent = 'Select a station first'; return; }
+  if (!currentStation) { setStatus('Select a station first'); return; }
   if (isPlaying) {
-    audio.pause();
-    isPlaying = false;
-    const p = document.getElementById('pulse');
-    if (p) p.style.display = 'none';
-    document.getElementById('status-txt').textContent = 'Paused';
+    audio.pause(); isPlaying = false;
+    const p = document.getElementById('pulse'); if (p) p.style.display = 'none';
+    setStatus('Paused');
   } else {
     audio.play().then(() => {
       isPlaying = true;
-      const p = document.getElementById('pulse');
-      if (p) p.style.display = 'inline-block';
-      document.getElementById('status-txt').textContent = 'Live';
-    });
+      const p = document.getElementById('pulse'); if (p) p.style.display = 'inline-block';
+      setStatus('Live');
+    }).catch(() => setStatus('Stream unavailable', true));
   }
   updatePlayBtn();
 }
@@ -491,37 +336,14 @@ function updatePlayBtn() {
     : '<path d="M8 5v14l11-7z"/>';
 }
 
-function setVol(v) {
-  audio.volume = v / 100;
-  document.getElementById('vol-out').textContent = v;
-}
-
-function toggleFav(id) {
-  const idx = favourites.indexOf(id);
-  if (idx >= 0) {
-    favourites.splice(idx, 1);
-    const pi = presets.indexOf(id);
-    if (pi >= 0) { presets[pi] = null; renderPresets(); }
-  } else {
-    favourites.push(id);
-    const empty = presets.indexOf(null);
-    if (empty >= 0) { presets[empty] = id; renderPresets(); }
-  }
-  save();
-  renderStations();
-}
+function setVol(v) { audio.volume = v / 100; document.getElementById('vol-out').textContent = v; }
 
 audio.addEventListener('error', () => {
-  document.getElementById('status-txt').textContent = 'Stream error';
-  isPlaying = false;
-  updatePlayBtn();
-  const p = document.getElementById('pulse');
-  if (p) p.style.display = 'none';
+  setStatus('Stream error', true); isPlaying = false; updatePlayBtn();
+  const p = document.getElementById('pulse'); if (p) p.style.display = 'none';
 });
 
-renderTabs();
-renderPresets();
-renderStations();
+loadStations();
 </script>
 </body>
 </html>
