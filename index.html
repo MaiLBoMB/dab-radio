@@ -78,6 +78,29 @@
     .dot:nth-child(2){animation-delay:0.2s} .dot:nth-child(3){animation-delay:0.4s}
     @keyframes ldot{0%,80%,100%{transform:scale(0.6);opacity:0.4}40%{transform:scale(1);opacity:1}}
 
+    /* CarPlay / driving mode */
+    .carplay-bar { display:flex; align-items:center; justify-content:space-between; background:var(--bg2); border-radius:var(--radius); border:0.5px solid var(--border); padding:10px 16px; margin-bottom:1.5rem; }
+    .carplay-bar span { font-size:13px; color:var(--text2); }
+    .carplay-toggle { padding:7px 16px; border-radius:20px; border:0.5px solid var(--border2); background:transparent; color:var(--text); font-size:13px; font-weight:500; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+    .carplay-toggle.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+    /* Driving mode station list */
+    .drive-grid { display:flex; flex-direction:column; gap:12px; }
+    .drive-card { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius-lg); padding:22px 20px; cursor:pointer; display:flex; align-items:center; gap:16px; min-height:80px; -webkit-tap-highlight-color:transparent; transition:border-color 0.15s, background 0.15s; }
+    .drive-card:active { background:var(--bg3); }
+    .drive-card.active { border-color:var(--accent); background:var(--bg3); border-width:1.5px; }
+    .drive-flag { font-size:26px; flex-shrink:0; }
+    .drive-info { flex:1; }
+    .drive-name { font-size:18px; font-weight:700; color:var(--text); line-height:1.2; }
+    .drive-genre { font-size:13px; color:var(--text2); margin-top:4px; }
+    .drive-playing { width:10px; height:10px; border-radius:50%; background:var(--accent); animation:pulse 1.2s ease-in-out infinite; flex-shrink:0; }
+
+    /* Prev/Next bar in driving mode */
+    .drive-nav { display:flex; gap:10px; margin-bottom:1.5rem; }
+    .drive-nav-btn { flex:1; padding:18px; border-radius:var(--radius-lg); border:0.5px solid var(--border2); background:var(--bg2); color:var(--text); font-size:22px; cursor:pointer; -webkit-tap-highlight-color:transparent; display:flex; align-items:center; justify-content:center; gap:10px; }
+    .drive-nav-btn span { font-size:15px; font-weight:600; }
+    .drive-nav-btn:active { background:var(--bg3); }
+
     @media(max-width:420px){
       .station-grid { grid-template-columns:1fr 1fr; }
       .s-name { font-size:14px; }
@@ -144,6 +167,7 @@ let currentStation = null;
 let isPlaying = false;
 let geoStation = null;
 let metaTimer = null;
+let driveMode = false;
 
 const audio = document.getElementById('audio');
 audio.volume = 0.8;
@@ -339,6 +363,14 @@ function requestGeo() {
   }, () => setStatus('Location denied', true));
 }
 
+// ── Drive mode toggle ─────────────────────────────────────────────────
+function toggleDriveMode() {
+  driveMode = !driveMode;
+  render();
+  const btn = document.getElementById('drive-toggle');
+  if (btn) { btn.textContent = driveMode ? '🚗 Driving mode on' : '🚗 Driving mode'; btn.classList.toggle('on', driveMode); }
+}
+
 // ── Render ─────────────────────────────────────────────────────────────
 function render() {
   const byCountry = {};
@@ -347,10 +379,42 @@ function render() {
     byCountry[s.country].push(s);
   });
 
-  let html = '';
+  const carplayBar = `<div class="carplay-bar">
+    <span>${driveMode ? 'Large buttons, easy tap' : 'Tap to enable large buttons for driving'}</span>
+    <button id="drive-toggle" class="carplay-toggle${driveMode?' on':''}" onclick="toggleDriveMode()">${driveMode ? '🚗 Driving mode on' : '🚗 Driving mode'}</button>
+  </div>`;
+
+  if (driveMode) {
+    // Driving mode — big list with prev/next
+    const all = getAllStationsOrdered();
+    let html = carplayBar;
+    html += `<div class="drive-nav">
+      <button class="drive-nav-btn" onclick="playPrev()"><span>&#9664;</span><span>Prev</span></button>
+      <button class="drive-nav-btn" onclick="playNext()"><span>Next</span><span>&#9654;</span></button>
+    </div>`;
+    html += `<div class="drive-grid">`;
+    all.forEach(s => {
+      const isActive = currentStation && currentStation.key === s.key;
+      const flag = FLAGS[s.country] || '📻';
+      const genre = s.genre || s.sub || '';
+      html += `<div class="drive-card${isActive?' active':''}" onclick="drivePlay('${s.key}')">
+        <span class="drive-flag">${flag}</span>
+        <div class="drive-info">
+          <div class="drive-name">${s.label}</div>
+          <div class="drive-genre">${genre}</div>
+        </div>
+        ${isActive && isPlaying ? '<div class="drive-playing"></div>' : ''}
+      </div>`;
+    });
+    html += `</div>`;
+    document.getElementById('main-list').innerHTML = html;
+    return;
+  }
+
+  // Normal mode
+  let html = carplayBar;
   if (byCountry['GB']) html += countrySection('GB', byCountry['GB']);
 
-  // France — Sanef
   html += `<div class="country-section">`;
   html += `<div class="country-heading"><span style="font-size:20px">${FLAGS['FR']}</span><span>${COUNTRY_NAMES['FR']}</span></div>`;
   if (geoStation) {
@@ -382,9 +446,7 @@ function render() {
     </div>`;
   });
   html += `</div></div>`;
-
   if (byCountry['BR']) html += countrySection('BR', byCountry['BR']);
-
   document.getElementById('main-list').innerHTML = html;
 }
 
@@ -407,6 +469,12 @@ function countrySection(cc, stations) {
 function playResolved(key) {
   const s = resolvedStations.find(x => x.key === key);
   if (s) startPlay({ key:s.key, label:s.label, country:s.country, genre:s.genre, stream:s.stream, uuid:s.uuid });
+}
+
+function drivePlay(key) {
+  const all = getAllStationsOrdered();
+  const s = all.find(x => x.key === key);
+  if (s) startPlay(s);
 }
 
 function playManual(s) {
@@ -471,18 +539,53 @@ audio.addEventListener('error', () => {
   stopMetaPolling();
 });
 
-// Media Session API — shows artist/title on lock screen and CarPlay
+// All stations in order for prev/next navigation
+function getAllStationsOrdered() {
+  const list = [];
+  resolvedStations.filter(s => s.country === 'GB').forEach(s => list.push({ key:s.key, label:s.label, country:s.country, genre:s.genre, stream:s.stream, uuid:s.uuid }));
+  SANEF_STATIONS.forEach(s => list.push({ key:s.key, label:s.label, country:'FR', genre:s.sub, stream:s.stream, uuid:null }));
+  resolvedStations.filter(s => s.country === 'BR').forEach(s => list.push({ key:s.key, label:s.label, country:s.country, genre:s.genre, stream:s.stream, uuid:s.uuid }));
+  return list;
+}
+
+function getCurrentIndex() {
+  if (!currentStation) return -1;
+  return getAllStationsOrdered().findIndex(s => s.key === currentStation.key);
+}
+
+function playNext() {
+  const all = getAllStationsOrdered();
+  if (!all.length) return;
+  const idx = getCurrentIndex();
+  const next = all[(idx + 1) % all.length];
+  startPlay(next);
+}
+
+function playPrev() {
+  const all = getAllStationsOrdered();
+  if (!all.length) return;
+  const idx = getCurrentIndex();
+  const prev = all[(idx - 1 + all.length) % all.length];
+  startPlay(prev);
+}
+
+// Media Session API — lock screen, CarPlay controls, steering wheel buttons
 function updateMediaSession(title, artist, station) {
-  if ('mediaSession' in navigator) {
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title:  title  || station.label,
-      artist: artist || station.genre,
-      album:  'DAB Radio',
-      artwork: [{ src:'icon.png', sizes:'512x512', type:'image/png' }]
-    });
-    navigator.mediaSession.setActionHandler('play',  () => { audio.play(); isPlaying=true; updatePlayBtn(); });
-    navigator.mediaSession.setActionHandler('pause', () => { audio.pause(); isPlaying=false; updatePlayBtn(); });
-  }
+  if (!('mediaSession' in navigator)) return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title:  title  || station.label,
+    artist: artist || station.genre,
+    album:  'DAB Radio',
+    artwork: [
+      { src:'icon.png', sizes:'192x192', type:'image/png' },
+      { src:'icon.png', sizes:'512x512', type:'image/png' }
+    ]
+  });
+  navigator.mediaSession.setActionHandler('play',          () => { audio.play(); isPlaying=true; updatePlayBtn(); setStatus('Live'); startMetaPolling(currentStation); });
+  navigator.mediaSession.setActionHandler('pause',         () => { audio.pause(); isPlaying=false; updatePlayBtn(); setStatus('Paused'); stopMetaPolling(); });
+  navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
+  navigator.mediaSession.setActionHandler('nexttrack',     () => playNext());
+  navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
 }
 
 const _origUpdate = updateTrackDisplay;
