@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon.png">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Radio">
   <meta name="theme-color" content="#0f0f0f">
+  <meta name="description" content="Personal DAB Radio Player — UK, France, Brazil">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.png">
   <title>DAB Radio</title>
   <style>
     *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
@@ -21,17 +22,24 @@
     }
     body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
     #app { max-width:680px; margin:0 auto; padding:1.5rem 1rem 4rem; }
-
-    /* Header */
     .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
     .header h1 { font-size:24px; font-weight:700; letter-spacing:-0.5px; }
     #status-txt { font-size:12px; color:var(--text2); }
 
-    /* Now playing */
+    /* Now playing card */
     .now-playing { background:var(--bg2); border-radius:var(--radius-lg); border:0.5px solid var(--border); padding:1.25rem; margin-bottom:2rem; }
     .np-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px; }
-    .np-station { font-size:22px; font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:10px; }
-    .np-meta { font-size:13px; color:var(--text2); margin-bottom:1rem; }
+    .np-station { font-size:20px; font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .np-genre { font-size:13px; color:var(--text2); margin-bottom:10px; }
+
+    /* Song metadata strip */
+    .np-track { background:var(--bg3); border-radius:var(--radius); padding:10px 14px; margin-bottom:14px; min-height:44px; display:flex; align-items:center; gap:10px; }
+    .np-track-icon { font-size:18px; flex-shrink:0; }
+    .np-track-info { flex:1; overflow:hidden; }
+    .np-title { font-size:14px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .np-artist { font-size:12px; color:var(--text2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .np-track-empty { font-size:13px; color:var(--text3); font-style:italic; }
+
     .controls { display:flex; align-items:center; gap:16px; }
     .play-btn { width:56px; height:56px; border-radius:50%; border:0.5px solid var(--border2); background:var(--bg3); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; -webkit-tap-highlight-color:transparent; }
     .play-btn:active { background:#333; }
@@ -48,8 +56,6 @@
     .country-section { margin-bottom:2rem; }
     .country-heading { display:flex; align-items:center; gap:8px; margin-bottom:0.75rem; }
     .country-heading span { font-size:13px; font-weight:600; color:var(--text2); text-transform:uppercase; letter-spacing:0.07em; }
-
-    /* Station cards — large for CarPlay */
     .station-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
     .station-card { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:18px 16px 14px; cursor:pointer; transition:border-color 0.15s,background 0.15s; position:relative; min-height:90px; -webkit-tap-highlight-color:transparent; display:flex; flex-direction:column; justify-content:space-between; }
     .station-card:active { background:var(--bg3); }
@@ -58,7 +64,7 @@
     .s-genre { font-size:12px; color:var(--text2); margin-top:6px; }
     .s-flag { font-size:18px; margin-bottom:8px; }
 
-    /* Sanef geo banner */
+    /* Sanef banner */
     .sanef-banner { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:12px 14px; margin-bottom:1rem; display:flex; align-items:flex-start; gap:10px; }
     .sanef-icon { font-size:20px; flex-shrink:0; margin-top:1px; }
     .sanef-info { flex:1; }
@@ -88,7 +94,10 @@
   <div class="now-playing">
     <div class="np-label">Now playing</div>
     <div class="np-station" id="np-station">Select a station</div>
-    <div class="np-meta" id="np-meta">Loading stations...</div>
+    <div class="np-genre" id="np-genre">Loading stations...</div>
+    <div class="np-track" id="np-track">
+      <span class="np-track-empty">No station selected</span>
+    </div>
     <div class="controls">
       <button class="play-btn" onclick="togglePlay()" aria-label="Play / Pause">
         <svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
@@ -105,29 +114,23 @@
 </div>
 <audio id="audio" preload="none"></audio>
 <script>
-// ── Curated station list ──────────────────────────────────────────────
-// Radio Browser search names → matched by API
 const WANTED = [
-  { key:'radiox',    country:'GB', label:'Radio X',        search:'Radio X',          genre:'Rock / Alternative' },
-  { key:'talksport', country:'GB', label:'talkSPORT',      search:'talkSPORT',        genre:'Sport' },
-  { key:'capital',   country:'GB', label:'Capital FM',     search:'Capital FM',       genre:'Pop' },
-  { key:'planet',    country:'GB', label:'Planet Rock',    search:'Planet Rock',      genre:'Rock' },
-  { key:'absrock',   country:'GB', label:'Absolute Radio', search:'Absolute Radio',   genre:'Rock' },
-  { key:'cidade',    country:'BR', label:'Rádio Cidade',   search:'Radio Cidade',     genre:'Pop / Hits' },
+  { key:'radiox',    country:'GB', label:'Radio X',        search:'Radio X',        genre:'Rock / Alternative' },
+  { key:'talksport', country:'GB', label:'talkSPORT',      search:'talkSPORT',      genre:'Sport' },
+  { key:'capital',   country:'GB', label:'Capital FM',     search:'Capital FM',     genre:'Pop' },
+  { key:'planet',    country:'GB', label:'Planet Rock',    search:'Planet Rock',    genre:'Rock' },
+  { key:'absrock',   country:'GB', label:'Absolute Radio', search:'Absolute Radio', genre:'Rock' },
+  { key:'cidade',    country:'BR', label:'Rádio Cidade',   search:'Radio Cidade',   genre:'Pop / Hits' },
 ];
 
-// Sanef 107.7 — 2 streams (since Aug 2022 restructure):
-// "Régions" covers Nord/Est/Ouest motorways; "IDF" covers Paris & Île-de-France
-// Streams: confirmed working HTTPS from infomaniak CDN
-// Geo boxes: [minLat, maxLat, minLon, maxLon]
 const SANEF_STATIONS = [
   { key:'sanef-idf',
-    label:'Sanef 107.7',
-    sub:'Paris & Île-de-France (DAB+)',
+    label:'Sanef 107.7 IDF',
+    sub:'Paris & Île-de-France',
     stream:'https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3',
     box:[48.1, 49.2, 1.4, 3.6] },
   { key:'sanef-regions',
-    label:'Sanef 107.7 ',
+    label:'Sanef 107.7 Régions',
     sub:'Nord, Est & Ouest motorways',
     stream:'https://sanef.ice.infomaniak.ch/sanef1077-regions.mp3',
     box:[47.0, 51.1, -1.8, 8.0] },
@@ -136,10 +139,11 @@ const SANEF_STATIONS = [
 const FLAGS = { GB:'🇬🇧', FR:'🇫🇷', BR:'🇧🇷' };
 const COUNTRY_NAMES = { GB:'United Kingdom', FR:'France — Motorway', BR:'Brazil' };
 
-let resolvedStations = []; // [{key, country, label, genre, stream, uuid}]
+let resolvedStations = [];
 let currentStation = null;
 let isPlaying = false;
-let geoStation = null; // auto-detected Sanef station
+let geoStation = null;
+let metaTimer = null;
 
 const audio = document.getElementById('audio');
 audio.volume = 0.8;
@@ -150,10 +154,144 @@ function setStatus(txt, err) {
   el.style.color = err ? '#E24B4A' : 'var(--text2)';
 }
 
+// ── Now playing metadata ──────────────────────────────────────────────
+// Uses RadioBrowser's station metadata endpoint + Shoutcast/Icecast title fallback
+let currentMeta = { title: '', artist: '' };
+
+function updateTrackDisplay(title, artist) {
+  const el = document.getElementById('np-track');
+  if (!title && !artist) {
+    el.innerHTML = `<span class="np-track-empty">Song info not available for this stream</span>`;
+    return;
+  }
+  el.innerHTML = `
+    <span class="np-track-icon">&#127925;</span>
+    <div class="np-track-info">
+      <div class="np-title">${escHtml(title || 'Unknown title')}</div>
+      <div class="np-artist">${escHtml(artist || 'Unknown artist')}</div>
+    </div>`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function parseTitleArtist(raw) {
+  if (!raw) return { title:'', artist:'' };
+  raw = raw.trim();
+  // Common formats: "Artist - Title" or "Title - Artist" or just "Title"
+  const sep = raw.indexOf(' - ');
+  if (sep > 0) {
+    return { artist: raw.slice(0, sep).trim(), title: raw.slice(sep + 3).trim() };
+  }
+  return { title: raw, artist: '' };
+}
+
+async function fetchMeta(station) {
+  if (!station) return;
+
+  // Method 1: Radio Browser now-playing via station UUID
+  if (station.uuid) {
+    try {
+      const r = await fetch(`https://de1.api.radio-browser.info/json/stations/byuuid/${station.uuid}`, {
+        headers: { 'User-Agent': 'DABRadioApp/1.0' }
+      });
+      const data = await r.json();
+      if (data && data[0] && data[0].lastcheckok) {
+        // Try to get stream title via a metadata proxy
+      }
+    } catch(e) {}
+  }
+
+  // Method 2: Fetch Icecast/Shoutcast metadata via stream URL status page
+  if (station.stream) {
+    try {
+      // Many Icecast servers expose /status-json.xsl or ?json at the stream host
+      const u = new URL(station.stream);
+      const base = `${u.protocol}//${u.host}`;
+      const mount = u.pathname;
+
+      // Try Icecast JSON status
+      const r = await fetch(`${base}/status-json.xsl`, { signal: AbortSignal.timeout(3000) });
+      if (r.ok) {
+        const data = await r.json();
+        const sources = data?.icestats?.source;
+        const arr = Array.isArray(sources) ? sources : (sources ? [sources] : []);
+        const src = arr.find(s => s.listenurl && s.listenurl.includes(mount.replace('.mp3','')))
+                 || arr[0];
+        if (src && src.title) {
+          const { title, artist } = parseTitleArtist(src.title);
+          updateTrackDisplay(title, artist);
+          return;
+        }
+      }
+    } catch(e) {}
+  }
+
+  // Method 3: BBC Radio uses their own metadata API
+  const bbcMap = {
+    bbcr1:  'bbc_radio_one',
+    bbcr2:  'bbc_radio_two',
+    bbcr3:  'bbc_radio_three',
+    bbcr4:  'bbc_radio_four_fm',
+    bbc5l:  'bbc_radio_five_live',
+    bbc6:   'bbc_6music',
+    bbc1x:  'bbc_1xtra',
+  };
+  if (bbcMap[station.key]) {
+    try {
+      const r = await fetch(
+        `https://rms.api.bbc.co.uk/v2/services/${bbcMap[station.key]}/segments/latest?limit=1&experience=domestic&offset=0`,
+        { signal: AbortSignal.timeout(4000) }
+      );
+      const data = await r.json();
+      const seg = data?.data?.[0];
+      if (seg) {
+        const title  = seg.titles?.primary || seg.titles?.secondary || '';
+        const artist = seg.titles?.tertiary || '';
+        updateTrackDisplay(title, artist);
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // Method 4: MusicBrainz-style lookup via RadioBrowser now-playing (community)
+  if (station.uuid) {
+    try {
+      const r = await fetch(
+        `https://de1.api.radio-browser.info/json/stations/byuuid/${station.uuid}`,
+        { headers:{'User-Agent':'DABRadioApp/1.0'}, signal: AbortSignal.timeout(4000) }
+      );
+      const data = await r.json();
+      const nowPlaying = data?.[0]?.now_playing;
+      if (nowPlaying) {
+        const { title, artist } = parseTitleArtist(nowPlaying);
+        updateTrackDisplay(title, artist);
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // Fallback: show genre
+  updateTrackDisplay('', '');
+}
+
+function startMetaPolling(station) {
+  if (metaTimer) clearInterval(metaTimer);
+  updateTrackDisplay('', '');
+  fetchMeta(station);
+  metaTimer = setInterval(() => fetchMeta(station), 15000);
+}
+
+function stopMetaPolling() {
+  if (metaTimer) { clearInterval(metaTimer); metaTimer = null; }
+  document.getElementById('np-track').innerHTML = `<span class="np-track-empty">No station selected</span>`;
+}
+
 // ── Radio Browser lookup ──────────────────────────────────────────────
 async function resolveStation(w) {
   try {
-    const cc = w.country === 'GB' ? 'GB' : w.country;
+    const cc = w.country;
     const url = `https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(w.search)}&countrycode=${cc}&limit=10&hidebroken=true&order=votes&reverse=true`;
     const r = await fetch(url, { headers:{'User-Agent':'DABRadioApp/1.0'} });
     const data = await r.json();
@@ -168,14 +306,13 @@ async function loadStations() {
   document.getElementById('main-list').innerHTML = `<div class="loading"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
   const results = await Promise.all(WANTED.map(resolveStation));
   resolvedStations = results.filter(Boolean);
-  // Sanef streams are hardcoded — no lookup needed
   setStatus('Ready');
-  document.getElementById('np-meta').textContent = 'Choose a station below';
+  document.getElementById('np-genre').textContent = 'Choose a station below';
   tryGeolocation();
   render();
 }
 
-// ── Geolocation for Sanef ─────────────────────────────────────────────
+// ── Geolocation ───────────────────────────────────────────────────────
 function tryGeolocation() {
   if (!navigator.geolocation) return;
   navigator.geolocation.watchPosition(pos => {
@@ -186,7 +323,7 @@ function tryGeolocation() {
     const prev = geoStation ? geoStation.key : null;
     geoStation = match || null;
     if ((match ? match.key : null) !== prev) render();
-  }, null, { enableHighAccuracy: false, maximumAge: 60000, timeout: 10000 });
+  }, null, { enableHighAccuracy:false, maximumAge:60000, timeout:10000 });
 }
 
 function requestGeo() {
@@ -194,11 +331,10 @@ function requestGeo() {
   setStatus('Getting location...');
   navigator.geolocation.getCurrentPosition(pos => {
     const { latitude: lat, longitude: lon } = pos.coords;
-    const match = SANEF_STATIONS.find(s =>
+    geoStation = SANEF_STATIONS.find(s =>
       lat >= s.box[0] && lat <= s.box[1] && lon >= s.box[2] && lon <= s.box[3]
-    );
-    geoStation = match || null;
-    setStatus(match ? 'Motorway detected' : 'No motorway detected');
+    ) || null;
+    setStatus(geoStation ? 'Motorway detected' : 'No motorway detected');
     render();
   }, () => setStatus('Location denied', true));
 }
@@ -212,17 +348,11 @@ function render() {
   });
 
   let html = '';
-
-  // UK
-  if (byCountry['GB']) {
-    html += countrySection('GB', byCountry['GB']);
-  }
+  if (byCountry['GB']) html += countrySection('GB', byCountry['GB']);
 
   // France — Sanef
   html += `<div class="country-section">`;
   html += `<div class="country-heading"><span style="font-size:20px">${FLAGS['FR']}</span><span>${COUNTRY_NAMES['FR']}</span></div>`;
-
-  // Geo banner
   if (geoStation) {
     html += `<div class="sanef-banner">
       <span class="sanef-icon">&#128652;</span>
@@ -230,38 +360,30 @@ function render() {
         <div class="sanef-title">Auto-detected: ${geoStation.label}</div>
         <div class="sanef-sub">${geoStation.sub}</div>
       </div>
-      <button class="sanef-btn" onclick="playManual(${JSON.stringify(geoStation).replace(/"/g,'&quot;')})">Play</button>
+      <button class="sanef-btn" onclick='playManual(${JSON.stringify(geoStation).replace(/'/g,"&#39;")})'>Play</button>
     </div>`;
   } else {
     html += `<div class="sanef-banner">
       <span class="sanef-icon">&#128205;</span>
       <div class="sanef-info">
         <div class="sanef-title">Motorway auto-detect</div>
-        <div class="sanef-sub">${geoStation === null ? 'Not on a Sanef motorway' : 'Tap to enable location'}</div>
+        <div class="sanef-sub">Tap Locate when driving in France</div>
       </div>
       <button class="sanef-btn" onclick="requestGeo()">Locate</button>
     </div>`;
   }
-
-  // All Sanef stations as cards
   html += `<div class="station-grid">`;
   SANEF_STATIONS.forEach(s => {
     const isActive = currentStation && currentStation.key === s.key;
     const isGeo = geoStation && geoStation.key === s.key;
-    html += `<div class="station-card${isActive?' active':''}" onclick="playManual(${JSON.stringify(s).replace(/"/g,'&quot;')})" style="${isGeo?'border-color:#1D9E75;':''}" >
-      <div>
-        <div class="s-flag">🛣️</div>
-        <div class="s-name">${s.label}</div>
-      </div>
+    html += `<div class="station-card${isActive?' active':''}" onclick='playManual(${JSON.stringify(s).replace(/'/g,"&#39;")})' style="${isGeo?'border-color:var(--accent);':''}">
+      <div><div class="s-flag">&#128739;</div><div class="s-name">${s.label}</div></div>
       <div class="s-genre">${s.sub}</div>
     </div>`;
   });
   html += `</div></div>`;
 
-  // Brazil
-  if (byCountry['BR']) {
-    html += countrySection('BR', byCountry['BR']);
-  }
+  if (byCountry['BR']) html += countrySection('BR', byCountry['BR']);
 
   document.getElementById('main-list').innerHTML = html;
 }
@@ -273,10 +395,7 @@ function countrySection(cc, stations) {
   stations.forEach(s => {
     const isActive = currentStation && currentStation.key === s.key;
     html += `<div class="station-card${isActive?' active':''}" onclick="playResolved('${s.key}')">
-      <div>
-        <div class="s-flag">${FLAGS[cc]}</div>
-        <div class="s-name">${s.label}</div>
-      </div>
+      <div><div class="s-flag">${FLAGS[cc]}</div><div class="s-name">${s.label}</div></div>
       <div class="s-genre">${s.genre}</div>
     </div>`;
   });
@@ -287,18 +406,19 @@ function countrySection(cc, stations) {
 // ── Playback ───────────────────────────────────────────────────────────
 function playResolved(key) {
   const s = resolvedStations.find(x => x.key === key);
-  if (s) startPlay({ key: s.key, label: s.label, country: s.country, genre: s.genre, stream: s.stream });
+  if (s) startPlay({ key:s.key, label:s.label, country:s.country, genre:s.genre, stream:s.stream, uuid:s.uuid });
 }
 
 function playManual(s) {
-  startPlay({ key: s.key, label: s.label, country: s.country || 'FR', genre: s.sub || 'Motorway', stream: s.stream });
+  startPlay({ key:s.key, label:s.label, country:s.country||'FR', genre:s.sub||'Motorway', stream:s.stream, uuid:null });
 }
 
 function startPlay(s) {
   currentStation = s;
   const flag = FLAGS[s.country] || '';
   document.getElementById('np-station').innerHTML = `${flag} ${s.label} <span class="pulse" id="pulse" style="display:none"></span>`;
-  document.getElementById('np-meta').textContent = s.genre;
+  document.getElementById('np-genre').textContent = s.genre;
+  document.getElementById('np-track').innerHTML = `<span class="np-track-empty">Connecting...</span>`;
   setStatus('Connecting...');
   audio.pause();
   audio.src = s.stream;
@@ -308,10 +428,13 @@ function startPlay(s) {
     const p = document.getElementById('pulse'); if (p) p.style.display = 'inline-block';
     setStatus('Live');
     updatePlayBtn();
+    startMetaPolling(s);
   }).catch(() => {
     setStatus('Stream unavailable', true);
-    document.getElementById('np-meta').textContent = s.genre + ' — could not connect';
+    document.getElementById('np-genre').textContent = s.genre + ' — could not connect';
+    document.getElementById('np-track').innerHTML = `<span class="np-track-empty">Stream unavailable</span>`;
     isPlaying = false; updatePlayBtn();
+    stopMetaPolling();
   });
   render();
 }
@@ -322,11 +445,13 @@ function togglePlay() {
     audio.pause(); isPlaying = false;
     const p = document.getElementById('pulse'); if (p) p.style.display = 'none';
     setStatus('Paused');
+    stopMetaPolling();
   } else {
     audio.play().then(() => {
       isPlaying = true;
       const p = document.getElementById('pulse'); if (p) p.style.display = 'inline-block';
       setStatus('Live');
+      startMetaPolling(currentStation);
     }).catch(() => setStatus('Stream unavailable', true));
   }
   updatePlayBtn();
@@ -343,7 +468,28 @@ function setVol(v) { audio.volume = v / 100; document.getElementById('vol-out').
 audio.addEventListener('error', () => {
   setStatus('Stream error', true); isPlaying = false; updatePlayBtn();
   const p = document.getElementById('pulse'); if (p) p.style.display = 'none';
+  stopMetaPolling();
 });
+
+// Media Session API — shows artist/title on lock screen and CarPlay
+function updateMediaSession(title, artist, station) {
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title:  title  || station.label,
+      artist: artist || station.genre,
+      album:  'DAB Radio',
+      artwork: [{ src:'icon.png', sizes:'512x512', type:'image/png' }]
+    });
+    navigator.mediaSession.setActionHandler('play',  () => { audio.play(); isPlaying=true; updatePlayBtn(); });
+    navigator.mediaSession.setActionHandler('pause', () => { audio.pause(); isPlaying=false; updatePlayBtn(); });
+  }
+}
+
+const _origUpdate = updateTrackDisplay;
+function updateTrackDisplay(title, artist) {
+  _origUpdate(title, artist);
+  if (currentStation) updateMediaSession(title, artist, currentStation);
+}
 
 loadStations();
 </script>
