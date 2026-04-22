@@ -212,32 +212,80 @@ function parseTitleArtist(raw) {
   return { title: raw, artist: '' };
 }
 
+async function fetchIcecastViaProxy(statusUrl, mount) {
+  const proxies = [
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u => `https://corsproxy.io/?${u}`,
+  ];
+  for (const proxy of proxies) {
+    try {
+      const r = await fetch(proxy(statusUrl), { signal: AbortSignal.timeout(6000) });
+      if (!r.ok) continue;
+      const data = await r.json();
+      const sources = data?.icestats?.source;
+      if (!sources) continue;
+      const arr = Array.isArray(sources) ? sources : [sources];
+      const src = arr.find(s => s.listenurl && s.listenurl.includes(mount)) || arr[0];
+      if (src?.title) return src.title;
+    } catch(e) {}
+  }
+  return null;
+}
+
 async function fetchMeta(station) {
   if (!station) return;
 
-  // Method 1: Fetch Icecast/Shoutcast metadata via stream URL status page
+  // Method 1: Icecast status — try direct first (works for Infomaniak/Sanef), then proxy
   if (station.stream) {
     try {
       const u = new URL(station.stream);
-      const base = `${u.protocol}//${u.host}`;
-      const mount = u.pathname;
-      const r = await fetch(`${base}/status-json.xsl`, { signal: AbortSignal.timeout(3000) });
-      if (r.ok) {
-        const data = await r.json();
-        const sources = data?.icestats?.source;
-        const arr = Array.isArray(sources) ? sources : (sources ? [sources] : []);
-        const src = arr.find(s => s.listenurl && s.listenurl.includes(mount.replace('.mp3','')))
-                 || arr[0];
-        if (src && src.title) {
-          const { title, artist } = parseTitleArtist(src.title);
-          updateTrackDisplay(title, artist);
-          return;
+      const statusUrl = `${u.protocol}//${u.host}/status-json.xsl`;
+      const mount = u.pathname.replace(/\.mp3$/i, '');
+      let raw = null;
+
+      try {
+        const r = await fetch(statusUrl, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) {
+          const data = await r.json();
+          const sources = data?.icestats?.source;
+          if (sources) {
+            const arr = Array.isArray(sources) ? sources : [sources];
+            const src = arr.find(s => s.listenurl && s.listenurl.includes(mount)) || arr[0];
+            raw = src?.title || null;
+          }
         }
+      } catch(e) {}
+
+      if (!raw) raw = await fetchIcecastViaProxy(statusUrl, mount);
+
+      if (raw) {
+        const { title, artist } = parseTitleArtist(raw);
+        updateTrackDisplay(title, artist);
+        return;
       }
     } catch(e) {}
   }
 
-  // Method 2: BBC Radio metadata API
+  // Method 2: Bauer stations (Absolute Radio, Planet Rock) — their own now-playing endpoint
+  const bauerMap = { absrock: 'absolute', planet: 'planetrock' };
+  if (bauerMap[station.key]) {
+    try {
+      const r = await fetch(
+        `https://listenapi.planetradio.co.uk/api9.2/nowplaying/${bauerMap[station.key]}`,
+        { signal: AbortSignal.timeout(4000) }
+      );
+      if (r.ok) {
+        const data = await r.json();
+        // Walk every plausible shape the response could have
+        const np = data?.now_playing ?? data?.nowPlaying ?? data?.current ?? data?.data;
+        const title  = np?.title  ?? np?.song  ?? np?.name  ?? data?.title  ?? data?.song  ?? '';
+        const artist = np?.artist ?? np?.artist_name ?? np?.artistName ?? data?.artist ?? '';
+        if (title || artist) { updateTrackDisplay(title, artist); return; }
+      }
+    } catch(e) {}
+  }
+
+  // Method 3: BBC Radio metadata API
   const bbcMap = {
     bbcr1:  'bbc_radio_one',
     bbcr2:  'bbc_radio_two',
@@ -264,7 +312,7 @@ async function fetchMeta(station) {
     } catch(e) {}
   }
 
-  // Method 3: RadioBrowser now-playing (community)
+  // Method 5: RadioBrowser now-playing (community)
   if (station.uuid) {
     try {
       const r = await fetch(
@@ -281,7 +329,10 @@ async function fetchMeta(station) {
     } catch(e) {}
   }
 
-  updateTrackDisplay('', '');
+  // Nothing worked — show genre as a soft fallback
+  const genre = station.genre || station.sub || '';
+  document.getElementById('np-track').innerHTML =
+    `<span class="np-track-empty">${escHtml(genre || 'No track info available')}</span>`;
 }
 
 function startMetaPolling(station) {
@@ -498,6 +549,7 @@ function startPlay(s) {
     const p = document.getElementById('pulse'); if (p) p.style.display = 'inline-block';
     setStatus('Live');
     updatePlayBtn();
+    updateMediaSession('', '', s);
     startMetaPolling(s);
   }).catch(() => {
     setStatus('Stream unavailable', true);
