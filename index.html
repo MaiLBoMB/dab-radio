@@ -148,7 +148,7 @@ const WANTED = [
 
 const SANEF_STATIONS = [
   { key:'sanef-idf',
-    label:'Sanef 107.7 IDF',
+    label:'Sanef 107.7 Paris Regions',
     sub:'Paris & Île-de-France',
     stream:'https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3',
     box:[48.1, 49.2, 1.4, 3.6] },
@@ -179,10 +179,7 @@ function setStatus(txt, err) {
 }
 
 // ── Now playing metadata ──────────────────────────────────────────────
-// Uses RadioBrowser's station metadata endpoint + Shoutcast/Icecast title fallback
-let currentMeta = { title: '', artist: '' };
-
-function updateTrackDisplay(title, artist) {
+function _renderTrack(title, artist) {
   const el = document.getElementById('np-track');
   if (!title && !artist) {
     el.innerHTML = `<span class="np-track-empty">Song info not available for this stream</span>`;
@@ -196,6 +193,11 @@ function updateTrackDisplay(title, artist) {
     </div>`;
 }
 
+function updateTrackDisplay(title, artist) {
+  _renderTrack(title, artist);
+  if (currentStation) updateMediaSession(title, artist, currentStation);
+}
+
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -203,7 +205,6 @@ function escHtml(s) {
 function parseTitleArtist(raw) {
   if (!raw) return { title:'', artist:'' };
   raw = raw.trim();
-  // Common formats: "Artist - Title" or "Title - Artist" or just "Title"
   const sep = raw.indexOf(' - ');
   if (sep > 0) {
     return { artist: raw.slice(0, sep).trim(), title: raw.slice(sep + 3).trim() };
@@ -214,28 +215,12 @@ function parseTitleArtist(raw) {
 async function fetchMeta(station) {
   if (!station) return;
 
-  // Method 1: Radio Browser now-playing via station UUID
-  if (station.uuid) {
-    try {
-      const r = await fetch(`https://de1.api.radio-browser.info/json/stations/byuuid/${station.uuid}`, {
-        headers: { 'User-Agent': 'DABRadioApp/1.0' }
-      });
-      const data = await r.json();
-      if (data && data[0] && data[0].lastcheckok) {
-        // Try to get stream title via a metadata proxy
-      }
-    } catch(e) {}
-  }
-
-  // Method 2: Fetch Icecast/Shoutcast metadata via stream URL status page
+  // Method 1: Fetch Icecast/Shoutcast metadata via stream URL status page
   if (station.stream) {
     try {
-      // Many Icecast servers expose /status-json.xsl or ?json at the stream host
       const u = new URL(station.stream);
       const base = `${u.protocol}//${u.host}`;
       const mount = u.pathname;
-
-      // Try Icecast JSON status
       const r = await fetch(`${base}/status-json.xsl`, { signal: AbortSignal.timeout(3000) });
       if (r.ok) {
         const data = await r.json();
@@ -252,7 +237,7 @@ async function fetchMeta(station) {
     } catch(e) {}
   }
 
-  // Method 3: BBC Radio uses their own metadata API
+  // Method 2: BBC Radio metadata API
   const bbcMap = {
     bbcr1:  'bbc_radio_one',
     bbcr2:  'bbc_radio_two',
@@ -279,7 +264,7 @@ async function fetchMeta(station) {
     } catch(e) {}
   }
 
-  // Method 4: MusicBrainz-style lookup via RadioBrowser now-playing (community)
+  // Method 3: RadioBrowser now-playing (community)
   if (station.uuid) {
     try {
       const r = await fetch(
@@ -296,13 +281,12 @@ async function fetchMeta(station) {
     } catch(e) {}
   }
 
-  // Fallback: show genre
   updateTrackDisplay('', '');
 }
 
 function startMetaPolling(station) {
   if (metaTimer) clearInterval(metaTimer);
-  updateTrackDisplay('', '');
+  _renderTrack('', '');
   fetchMeta(station);
   metaTimer = setInterval(() => fetchMeta(station), 15000);
 }
@@ -352,8 +336,7 @@ function tryGeolocation() {
     if (newKey !== prevKey) {
       render();
       if (match) {
-        // Entered a new Sanef zone — auto-play if nothing else is playing,
-        // or if we were already on a Sanef station (zone change while driving)
+        // Auto-play on zone entry, or when already on a Sanef station (zone change while driving)
         const onSanef = currentStation && SANEF_STATIONS.some(s => s.key === currentStation.key);
         if (!isPlaying || onSanef) {
           playManual(match);
@@ -405,7 +388,6 @@ function render() {
   </div>`;
 
   if (driveMode) {
-    // Driving mode — big list with prev/next
     const all = getAllStationsOrdered();
     let html = carplayBar;
     html += `<div class="drive-nav">
@@ -577,19 +559,17 @@ function playNext() {
   const all = getAllStationsOrdered();
   if (!all.length) return;
   const idx = getCurrentIndex();
-  const next = all[(idx + 1) % all.length];
-  startPlay(next);
+  startPlay(all[(idx + 1) % all.length]);
 }
 
 function playPrev() {
   const all = getAllStationsOrdered();
   if (!all.length) return;
   const idx = getCurrentIndex();
-  const prev = all[(idx - 1 + all.length) % all.length];
-  startPlay(prev);
+  startPlay(all[(idx - 1 + all.length) % all.length]);
 }
 
-// Media Session API — lock screen, CarPlay controls, steering wheel buttons
+// ── Media Session API — lock screen / CarPlay / steering wheel ─────────
 function updateMediaSession(title, artist, station) {
   if (!('mediaSession' in navigator)) return;
   navigator.mediaSession.metadata = new MediaMetadata({
@@ -606,611 +586,6 @@ function updateMediaSession(title, artist, station) {
   navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
   navigator.mediaSession.setActionHandler('nexttrack',     () => playNext());
   navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-}
-
-const _origUpdate = updateTrackDisplay;
-function updateTrackDisplay(title, artist) {
-  _origUpdate(title, artist);
-  if (currentStation) updateMediaSession(title, artist, currentStation);
-}
-
-loadStations();
-</script>
-</body>
-</html><!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Radio">
-  <meta name="theme-color" content="#0f0f0f">
-  <meta name="description" content="Personal DAB Radio Player — UK, France, Brazil">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon.png">
-  <title>DAB Radio</title>
-  <style>
-    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-    :root {
-      --bg:#0f0f0f; --bg2:#1a1a1a; --bg3:#252525;
-      --border:rgba(255,255,255,0.1); --border2:rgba(255,255,255,0.2);
-      --text:#f0f0f0; --text2:#999; --text3:#555;
-      --accent:#1D9E75; --accent2:#534AB7;
-      --radius:12px; --radius-lg:16px;
-    }
-    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
-    #app { max-width:680px; margin:0 auto; padding:1.5rem 1rem 4rem; }
-    .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
-    .header h1 { font-size:24px; font-weight:700; letter-spacing:-0.5px; }
-    #status-txt { font-size:12px; color:var(--text2); }
-
-    /* Now playing card */
-    .now-playing { background:var(--bg2); border-radius:var(--radius-lg); border:0.5px solid var(--border); padding:1.25rem; margin-bottom:2rem; }
-    .np-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px; }
-    .np-station { font-size:20px; font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-    .np-genre { font-size:13px; color:var(--text2); margin-bottom:10px; }
-
-    /* Song metadata strip */
-    .np-track { background:var(--bg3); border-radius:var(--radius); padding:10px 14px; margin-bottom:14px; min-height:44px; display:flex; align-items:center; gap:10px; }
-    .np-track-icon { font-size:18px; flex-shrink:0; }
-    .np-track-info { flex:1; overflow:hidden; }
-    .np-title { font-size:14px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .np-artist { font-size:12px; color:var(--text2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .np-track-empty { font-size:13px; color:var(--text3); font-style:italic; }
-
-    .controls { display:flex; align-items:center; gap:16px; }
-    .play-btn { width:56px; height:56px; border-radius:50%; border:0.5px solid var(--border2); background:var(--bg3); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; -webkit-tap-highlight-color:transparent; }
-    .play-btn:active { background:#333; }
-    .play-btn svg { width:24px; height:24px; fill:var(--text); }
-    .vol-wrap { display:flex; align-items:center; gap:10px; flex:1; }
-    input[type=range] { -webkit-appearance:none; appearance:none; flex:1; height:4px; border-radius:2px; background:var(--bg3); outline:none; cursor:pointer; }
-    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--text); cursor:pointer; }
-    input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%; background:var(--text); border:none; cursor:pointer; }
-    .vol-out { font-size:12px; color:var(--text2); min-width:28px; text-align:right; }
-    .pulse { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--accent); animation:pulse 1.2s ease-in-out infinite; flex-shrink:0; }
-    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.6)} }
-
-    /* Country sections */
-    .country-section { margin-bottom:2rem; }
-    .country-heading { display:flex; align-items:center; gap:8px; margin-bottom:0.75rem; }
-    .country-heading span { font-size:13px; font-weight:600; color:var(--text2); text-transform:uppercase; letter-spacing:0.07em; }
-    .station-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
-    .station-card { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:18px 16px 14px; cursor:pointer; transition:border-color 0.15s,background 0.15s; position:relative; min-height:90px; -webkit-tap-highlight-color:transparent; display:flex; flex-direction:column; justify-content:space-between; }
-    .station-card:active { background:var(--bg3); }
-    .station-card.active { border-color:var(--accent); background:var(--bg3); }
-    .s-name { font-size:15px; font-weight:600; line-height:1.3; color:var(--text); }
-    .s-genre { font-size:12px; color:var(--text2); margin-top:6px; }
-    .s-flag { font-size:18px; margin-bottom:8px; }
-
-    /* Sanef banner */
-    .sanef-banner { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:12px 14px; margin-bottom:1rem; display:flex; align-items:flex-start; gap:10px; }
-    .sanef-icon { font-size:20px; flex-shrink:0; margin-top:1px; }
-    .sanef-info { flex:1; }
-    .sanef-title { font-size:13px; font-weight:600; color:var(--text); }
-    .sanef-sub { font-size:12px; color:var(--text2); margin-top:2px; }
-    .sanef-btn { font-size:12px; padding:6px 12px; border-radius:8px; border:0.5px solid var(--border2); background:transparent; color:var(--text); cursor:pointer; flex-shrink:0; margin-top:2px; -webkit-tap-highlight-color:transparent; }
-    .sanef-btn:active { background:var(--bg3); }
-
-    .loading { padding:3rem 0; text-align:center; color:var(--text2); font-size:14px; }
-    .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--text3); margin:0 3px; animation:ldot 1.2s ease-in-out infinite; }
-    .dot:nth-child(2){animation-delay:0.2s} .dot:nth-child(3){animation-delay:0.4s}
-    @keyframes ldot{0%,80%,100%{transform:scale(0.6);opacity:0.4}40%{transform:scale(1);opacity:1}}
-
-    /* CarPlay / driving mode */
-    .carplay-bar { display:flex; align-items:center; justify-content:space-between; background:var(--bg2); border-radius:var(--radius); border:0.5px solid var(--border); padding:10px 16px; margin-bottom:1.5rem; }
-    .carplay-bar span { font-size:13px; color:var(--text2); }
-    .carplay-toggle { padding:7px 16px; border-radius:20px; border:0.5px solid var(--border2); background:transparent; color:var(--text); font-size:13px; font-weight:500; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-    .carplay-toggle.on { background:var(--accent); border-color:var(--accent); color:#fff; }
-
-    /* Driving mode station list */
-    .drive-grid { display:flex; flex-direction:column; gap:12px; }
-    .drive-card { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius-lg); padding:22px 20px; cursor:pointer; display:flex; align-items:center; gap:16px; min-height:80px; -webkit-tap-highlight-color:transparent; transition:border-color 0.15s, background 0.15s; }
-    .drive-card:active { background:var(--bg3); }
-    .drive-card.active { border-color:var(--accent); background:var(--bg3); border-width:1.5px; }
-    .drive-flag { font-size:26px; flex-shrink:0; }
-    .drive-info { flex:1; }
-    .drive-name { font-size:18px; font-weight:700; color:var(--text); line-height:1.2; }
-    .drive-genre { font-size:13px; color:var(--text2); margin-top:4px; }
-    .drive-playing { width:10px; height:10px; border-radius:50%; background:var(--accent); animation:pulse 1.2s ease-in-out infinite; flex-shrink:0; }
-
-    /* Prev/Next bar in driving mode */
-    .drive-nav { display:flex; gap:10px; margin-bottom:1.5rem; }
-    .drive-nav-btn { flex:1; padding:18px; border-radius:var(--radius-lg); border:0.5px solid var(--border2); background:var(--bg2); color:var(--text); font-size:22px; cursor:pointer; -webkit-tap-highlight-color:transparent; display:flex; align-items:center; justify-content:center; gap:10px; }
-    .drive-nav-btn span { font-size:15px; font-weight:600; }
-    .drive-nav-btn:active { background:var(--bg3); }
-
-    @media(max-width:420px){
-      .station-grid { grid-template-columns:1fr 1fr; }
-      .s-name { font-size:14px; }
-    }
-  </style>
-</head>
-<body>
-<div id="app">
-  <div class="header">
-    <h1>&#128251; Radio</h1>
-    <span id="status-txt">Loading...</span>
-  </div>
-
-  <div class="now-playing">
-    <div class="np-label">Now playing</div>
-    <div class="np-station" id="np-station">Select a station</div>
-    <div class="np-genre" id="np-genre">Loading stations...</div>
-    <div class="np-track" id="np-track">
-      <span class="np-track-empty">No station selected</span>
-    </div>
-    <div class="controls">
-      <button class="play-btn" onclick="togglePlay()" aria-label="Play / Pause">
-        <svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
-      </button>
-      <div class="vol-wrap">
-        <span style="font-size:16px;color:var(--text2)">&#128266;</span>
-        <input type="range" min="0" max="100" value="80" step="1" id="vol" oninput="setVol(this.value)">
-        <span class="vol-out" id="vol-out">80</span>
-      </div>
-    </div>
-  </div>
-
-  <div id="main-list"></div>
-</div>
-<audio id="audio" preload="none"></audio>
-<script>
-const WANTED = [
-  { key:'radiox',    country:'GB', label:'Radio X',        search:'Radio X',        genre:'Rock / Alternative' },
-  { key:'talksport', country:'GB', label:'talkSPORT',      search:'talkSPORT',      genre:'Sport' },
-  { key:'capital',   country:'GB', label:'Capital FM',     search:'Capital FM',     genre:'Pop' },
-  { key:'planet',    country:'GB', label:'Planet Rock',    search:'Planet Rock',    genre:'Rock' },
-  { key:'absrock',   country:'GB', label:'Absolute Radio', search:'Absolute Radio', genre:'Rock' },
-  { key:'cidade',    country:'BR', label:'Rádio Cidade',   search:'Radio Cidade',   genre:'Pop / Hits' },
-];
-
-const SANEF_STATIONS = [
-  { key:'sanef-idf',
-    label:'Sanef 107.7 ',
-    sub:'Paris & Île-de-France',
-    stream:'https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3',
-    box:[48.1, 49.2, 1.4, 3.6] },
-  { key:'sanef-regions',
-    label:'Sanef 107.7 Régions',
-    sub:'Nord, Est & Ouest motorways',
-    stream:'https://sanef.ice.infomaniak.ch/sanef1077-regions.mp3',
-    box:[47.0, 51.1, -1.8, 8.0] },
-];
-
-const FLAGS = { GB:'🇬🇧', FR:'🇫🇷', BR:'🇧🇷' };
-const COUNTRY_NAMES = { GB:'United Kingdom', FR:'France — Motorway', BR:'Brazil' };
-
-let resolvedStations = [];
-let currentStation = null;
-let isPlaying = false;
-let geoStation = null;
-let metaTimer = null;
-let driveMode = true;
-
-const audio = document.getElementById('audio');
-audio.volume = 0.8;
-
-function setStatus(txt, err) {
-  const el = document.getElementById('status-txt');
-  el.textContent = txt;
-  el.style.color = err ? '#E24B4A' : 'var(--text2)';
-}
-
-// ── Now playing metadata ──────────────────────────────────────────────
-// Uses RadioBrowser's station metadata endpoint + Shoutcast/Icecast title fallback
-let currentMeta = { title: '', artist: '' };
-
-function updateTrackDisplay(title, artist) {
-  const el = document.getElementById('np-track');
-  if (!title && !artist) {
-    el.innerHTML = `<span class="np-track-empty">Song info not available for this stream</span>`;
-    return;
-  }
-  el.innerHTML = `
-    <span class="np-track-icon">&#127925;</span>
-    <div class="np-track-info">
-      <div class="np-title">${escHtml(title || 'Unknown title')}</div>
-      <div class="np-artist">${escHtml(artist || 'Unknown artist')}</div>
-    </div>`;
-}
-
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function parseTitleArtist(raw) {
-  if (!raw) return { title:'', artist:'' };
-  raw = raw.trim();
-  // Common formats: "Artist - Title" or "Title - Artist" or just "Title"
-  const sep = raw.indexOf(' - ');
-  if (sep > 0) {
-    return { artist: raw.slice(0, sep).trim(), title: raw.slice(sep + 3).trim() };
-  }
-  return { title: raw, artist: '' };
-}
-
-async function fetchMeta(station) {
-  if (!station) return;
-
-  // Method 1: Radio Browser now-playing via station UUID
-  if (station.uuid) {
-    try {
-      const r = await fetch(`https://de1.api.radio-browser.info/json/stations/byuuid/${station.uuid}`, {
-        headers: { 'User-Agent': 'DABRadioApp/1.0' }
-      });
-      const data = await r.json();
-      if (data && data[0] && data[0].lastcheckok) {
-        // Try to get stream title via a metadata proxy
-      }
-    } catch(e) {}
-  }
-
-  // Method 2: Fetch Icecast/Shoutcast metadata via stream URL status page
-  if (station.stream) {
-    try {
-      // Many Icecast servers expose /status-json.xsl or ?json at the stream host
-      const u = new URL(station.stream);
-      const base = `${u.protocol}//${u.host}`;
-      const mount = u.pathname;
-
-      // Try Icecast JSON status
-      const r = await fetch(`${base}/status-json.xsl`, { signal: AbortSignal.timeout(3000) });
-      if (r.ok) {
-        const data = await r.json();
-        const sources = data?.icestats?.source;
-        const arr = Array.isArray(sources) ? sources : (sources ? [sources] : []);
-        const src = arr.find(s => s.listenurl && s.listenurl.includes(mount.replace('.mp3','')))
-                 || arr[0];
-        if (src && src.title) {
-          const { title, artist } = parseTitleArtist(src.title);
-          updateTrackDisplay(title, artist);
-          return;
-        }
-      }
-    } catch(e) {}
-  }
-
-  // Method 3: BBC Radio uses their own metadata API
-  const bbcMap = {
-    bbcr1:  'bbc_radio_one',
-    bbcr2:  'bbc_radio_two',
-    bbcr3:  'bbc_radio_three',
-    bbcr4:  'bbc_radio_four_fm',
-    bbc5l:  'bbc_radio_five_live',
-    bbc6:   'bbc_6music',
-    bbc1x:  'bbc_1xtra',
-  };
-  if (bbcMap[station.key]) {
-    try {
-      const r = await fetch(
-        `https://rms.api.bbc.co.uk/v2/services/${bbcMap[station.key]}/segments/latest?limit=1&experience=domestic&offset=0`,
-        { signal: AbortSignal.timeout(4000) }
-      );
-      const data = await r.json();
-      const seg = data?.data?.[0];
-      if (seg) {
-        const title  = seg.titles?.primary || seg.titles?.secondary || '';
-        const artist = seg.titles?.tertiary || '';
-        updateTrackDisplay(title, artist);
-        return;
-      }
-    } catch(e) {}
-  }
-
-  // Method 4: MusicBrainz-style lookup via RadioBrowser now-playing (community)
-  if (station.uuid) {
-    try {
-      const r = await fetch(
-        `https://de1.api.radio-browser.info/json/stations/byuuid/${station.uuid}`,
-        { headers:{'User-Agent':'DABRadioApp/1.0'}, signal: AbortSignal.timeout(4000) }
-      );
-      const data = await r.json();
-      const nowPlaying = data?.[0]?.now_playing;
-      if (nowPlaying) {
-        const { title, artist } = parseTitleArtist(nowPlaying);
-        updateTrackDisplay(title, artist);
-        return;
-      }
-    } catch(e) {}
-  }
-
-  // Fallback: show genre
-  updateTrackDisplay('', '');
-}
-
-function startMetaPolling(station) {
-  if (metaTimer) clearInterval(metaTimer);
-  updateTrackDisplay('', '');
-  fetchMeta(station);
-  metaTimer = setInterval(() => fetchMeta(station), 15000);
-}
-
-function stopMetaPolling() {
-  if (metaTimer) { clearInterval(metaTimer); metaTimer = null; }
-  document.getElementById('np-track').innerHTML = `<span class="np-track-empty">No station selected</span>`;
-}
-
-// ── Radio Browser lookup ──────────────────────────────────────────────
-async function resolveStation(w) {
-  try {
-    const cc = w.country;
-    const url = `https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(w.search)}&countrycode=${cc}&limit=10&hidebroken=true&order=votes&reverse=true`;
-    const r = await fetch(url, { headers:{'User-Agent':'DABRadioApp/1.0'} });
-    const data = await r.json();
-    const match = data.find(s => s.url_resolved && s.url_resolved.startsWith('https'))
-                || data.find(s => s.url_resolved);
-    if (match) return { ...w, stream: match.url_resolved, uuid: match.stationuuid };
-  } catch(e) {}
-  return null;
-}
-
-async function loadStations() {
-  document.getElementById('main-list').innerHTML = `<div class="loading"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
-  const results = await Promise.all(WANTED.map(resolveStation));
-  resolvedStations = results.filter(Boolean);
-  setStatus('Ready');
-  document.getElementById('np-genre').textContent = 'Choose a station below';
-  tryGeolocation();
-  render();
-}
-
-// ── Geolocation ───────────────────────────────────────────────────────
-function tryGeolocation() {
-  if (!navigator.geolocation) return;
-  navigator.geolocation.watchPosition(pos => {
-    const { latitude: lat, longitude: lon } = pos.coords;
-    const match = SANEF_STATIONS.find(s =>
-      lat >= s.box[0] && lat <= s.box[1] && lon >= s.box[2] && lon <= s.box[3]
-    );
-    const prev = geoStation ? geoStation.key : null;
-    geoStation = match || null;
-    if ((match ? match.key : null) !== prev) render();
-  }, null, { enableHighAccuracy:false, maximumAge:60000, timeout:10000 });
-}
-
-function requestGeo() {
-  if (!navigator.geolocation) { setStatus('Geolocation not supported', true); return; }
-  setStatus('Getting location...');
-  navigator.geolocation.getCurrentPosition(pos => {
-    const { latitude: lat, longitude: lon } = pos.coords;
-    geoStation = SANEF_STATIONS.find(s =>
-      lat >= s.box[0] && lat <= s.box[1] && lon >= s.box[2] && lon <= s.box[3]
-    ) || null;
-    setStatus(geoStation ? 'Motorway detected' : 'No motorway detected');
-    render();
-  }, () => setStatus('Location denied', true));
-}
-
-// ── Drive mode toggle ─────────────────────────────────────────────────
-function toggleDriveMode() {
-  driveMode = !driveMode;
-  render();
-  const btn = document.getElementById('drive-toggle');
-  if (btn) { btn.textContent = driveMode ? '🚗 Driving mode on' : '🚗 Driving mode'; btn.classList.toggle('on', driveMode); }
-}
-
-// ── Render ─────────────────────────────────────────────────────────────
-function render() {
-  const byCountry = {};
-  resolvedStations.forEach(s => {
-    if (!byCountry[s.country]) byCountry[s.country] = [];
-    byCountry[s.country].push(s);
-  });
-
-  const carplayBar = `<div class="carplay-bar">
-    <span>${driveMode ? 'Large buttons, easy tap' : 'Tap to enable large buttons for driving'}</span>
-    <button id="drive-toggle" class="carplay-toggle${driveMode?' on':''}" onclick="toggleDriveMode()">${driveMode ? '🚗 Driving mode on' : '🚗 Driving mode'}</button>
-  </div>`;
-
-  if (driveMode) {
-    // Driving mode — big list with prev/next
-    const all = getAllStationsOrdered();
-    let html = carplayBar;
-    html += `<div class="drive-nav">
-      <button class="drive-nav-btn" onclick="playPrev()"><span>&#9664;</span><span>Prev</span></button>
-      <button class="drive-nav-btn" onclick="playNext()"><span>Next</span><span>&#9654;</span></button>
-    </div>`;
-    html += `<div class="drive-grid">`;
-    all.forEach(s => {
-      const isActive = currentStation && currentStation.key === s.key;
-      const flag = FLAGS[s.country] || '📻';
-      const genre = s.genre || s.sub || '';
-      html += `<div class="drive-card${isActive?' active':''}" onclick="drivePlay('${s.key}')">
-        <span class="drive-flag">${flag}</span>
-        <div class="drive-info">
-          <div class="drive-name">${s.label}</div>
-          <div class="drive-genre">${genre}</div>
-        </div>
-        ${isActive && isPlaying ? '<div class="drive-playing"></div>' : ''}
-      </div>`;
-    });
-    html += `</div>`;
-    document.getElementById('main-list').innerHTML = html;
-    return;
-  }
-
-  // Normal mode
-  let html = carplayBar;
-  if (byCountry['GB']) html += countrySection('GB', byCountry['GB']);
-
-  html += `<div class="country-section">`;
-  html += `<div class="country-heading"><span style="font-size:20px">${FLAGS['FR']}</span><span>${COUNTRY_NAMES['FR']}</span></div>`;
-  if (geoStation) {
-    html += `<div class="sanef-banner">
-      <span class="sanef-icon">&#128652;</span>
-      <div class="sanef-info">
-        <div class="sanef-title">Auto-detected: ${geoStation.label}</div>
-        <div class="sanef-sub">${geoStation.sub}</div>
-      </div>
-      <button class="sanef-btn" onclick='playManual(${JSON.stringify(geoStation).replace(/'/g,"&#39;")})'>Play</button>
-    </div>`;
-  } else {
-    html += `<div class="sanef-banner">
-      <span class="sanef-icon">&#128205;</span>
-      <div class="sanef-info">
-        <div class="sanef-title">Motorway auto-detect</div>
-        <div class="sanef-sub">Tap Locate when driving in France</div>
-      </div>
-      <button class="sanef-btn" onclick="requestGeo()">Locate</button>
-    </div>`;
-  }
-  html += `<div class="station-grid">`;
-  SANEF_STATIONS.forEach(s => {
-    const isActive = currentStation && currentStation.key === s.key;
-    const isGeo = geoStation && geoStation.key === s.key;
-    html += `<div class="station-card${isActive?' active':''}" onclick='playManual(${JSON.stringify(s).replace(/'/g,"&#39;")})' style="${isGeo?'border-color:var(--accent);':''}">
-      <div><div class="s-flag">&#128739;</div><div class="s-name">${s.label}</div></div>
-      <div class="s-genre">${s.sub}</div>
-    </div>`;
-  });
-  html += `</div></div>`;
-  if (byCountry['BR']) html += countrySection('BR', byCountry['BR']);
-  document.getElementById('main-list').innerHTML = html;
-}
-
-function countrySection(cc, stations) {
-  let html = `<div class="country-section">`;
-  html += `<div class="country-heading"><span style="font-size:20px">${FLAGS[cc]}</span><span>${COUNTRY_NAMES[cc]||cc}</span></div>`;
-  html += `<div class="station-grid">`;
-  stations.forEach(s => {
-    const isActive = currentStation && currentStation.key === s.key;
-    html += `<div class="station-card${isActive?' active':''}" onclick="playResolved('${s.key}')">
-      <div><div class="s-flag">${FLAGS[cc]}</div><div class="s-name">${s.label}</div></div>
-      <div class="s-genre">${s.genre}</div>
-    </div>`;
-  });
-  html += `</div></div>`;
-  return html;
-}
-
-// ── Playback ───────────────────────────────────────────────────────────
-function playResolved(key) {
-  const s = resolvedStations.find(x => x.key === key);
-  if (s) startPlay({ key:s.key, label:s.label, country:s.country, genre:s.genre, stream:s.stream, uuid:s.uuid });
-}
-
-function drivePlay(key) {
-  const all = getAllStationsOrdered();
-  const s = all.find(x => x.key === key);
-  if (s) startPlay(s);
-}
-
-function playManual(s) {
-  startPlay({ key:s.key, label:s.label, country:s.country||'FR', genre:s.sub||'Motorway', stream:s.stream, uuid:null });
-}
-
-function startPlay(s) {
-  currentStation = s;
-  const flag = FLAGS[s.country] || '';
-  document.getElementById('np-station').innerHTML = `${flag} ${s.label} <span class="pulse" id="pulse" style="display:none"></span>`;
-  document.getElementById('np-genre').textContent = s.genre;
-  document.getElementById('np-track').innerHTML = `<span class="np-track-empty">Connecting...</span>`;
-  setStatus('Connecting...');
-  audio.pause();
-  audio.src = s.stream;
-  audio.load();
-  audio.play().then(() => {
-    isPlaying = true;
-    const p = document.getElementById('pulse'); if (p) p.style.display = 'inline-block';
-    setStatus('Live');
-    updatePlayBtn();
-    startMetaPolling(s);
-  }).catch(() => {
-    setStatus('Stream unavailable', true);
-    document.getElementById('np-genre').textContent = s.genre + ' — could not connect';
-    document.getElementById('np-track').innerHTML = `<span class="np-track-empty">Stream unavailable</span>`;
-    isPlaying = false; updatePlayBtn();
-    stopMetaPolling();
-  });
-  render();
-}
-
-function togglePlay() {
-  if (!currentStation) { setStatus('Select a station first'); return; }
-  if (isPlaying) {
-    audio.pause(); isPlaying = false;
-    const p = document.getElementById('pulse'); if (p) p.style.display = 'none';
-    setStatus('Paused');
-    stopMetaPolling();
-  } else {
-    audio.play().then(() => {
-      isPlaying = true;
-      const p = document.getElementById('pulse'); if (p) p.style.display = 'inline-block';
-      setStatus('Live');
-      startMetaPolling(currentStation);
-    }).catch(() => setStatus('Stream unavailable', true));
-  }
-  updatePlayBtn();
-}
-
-function updatePlayBtn() {
-  document.getElementById('play-icon').innerHTML = isPlaying
-    ? '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>'
-    : '<path d="M8 5v14l11-7z"/>';
-}
-
-function setVol(v) { audio.volume = v / 100; document.getElementById('vol-out').textContent = v; }
-
-audio.addEventListener('error', () => {
-  setStatus('Stream error', true); isPlaying = false; updatePlayBtn();
-  const p = document.getElementById('pulse'); if (p) p.style.display = 'none';
-  stopMetaPolling();
-});
-
-// All stations in order for prev/next navigation
-function getAllStationsOrdered() {
-  const list = [];
-  resolvedStations.filter(s => s.country === 'GB').forEach(s => list.push({ key:s.key, label:s.label, country:s.country, genre:s.genre, stream:s.stream, uuid:s.uuid }));
-  SANEF_STATIONS.forEach(s => list.push({ key:s.key, label:s.label, country:'FR', genre:s.sub, stream:s.stream, uuid:null }));
-  resolvedStations.filter(s => s.country === 'BR').forEach(s => list.push({ key:s.key, label:s.label, country:s.country, genre:s.genre, stream:s.stream, uuid:s.uuid }));
-  return list;
-}
-
-function getCurrentIndex() {
-  if (!currentStation) return -1;
-  return getAllStationsOrdered().findIndex(s => s.key === currentStation.key);
-}
-
-function playNext() {
-  const all = getAllStationsOrdered();
-  if (!all.length) return;
-  const idx = getCurrentIndex();
-  const next = all[(idx + 1) % all.length];
-  startPlay(next);
-}
-
-function playPrev() {
-  const all = getAllStationsOrdered();
-  if (!all.length) return;
-  const idx = getCurrentIndex();
-  const prev = all[(idx - 1 + all.length) % all.length];
-  startPlay(prev);
-}
-
-// Media Session API — lock screen, CarPlay controls, steering wheel buttons
-function updateMediaSession(title, artist, station) {
-  if (!('mediaSession' in navigator)) return;
-  navigator.mediaSession.metadata = new MediaMetadata({
-    title:  title  || station.label,
-    artist: artist || station.genre,
-    album:  'DAB Radio',
-    artwork: [
-      { src:'icon.png', sizes:'192x192', type:'image/png' },
-      { src:'icon.png', sizes:'512x512', type:'image/png' }
-    ]
-  });
-  navigator.mediaSession.setActionHandler('play',          () => { audio.play(); isPlaying=true; updatePlayBtn(); setStatus('Live'); startMetaPolling(currentStation); });
-  navigator.mediaSession.setActionHandler('pause',         () => { audio.pause(); isPlaying=false; updatePlayBtn(); setStatus('Paused'); stopMetaPolling(); });
-  navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
-  navigator.mediaSession.setActionHandler('nexttrack',     () => playNext());
-  navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-}
-
-const _origUpdate = updateTrackDisplay;
-function updateTrackDisplay(title, artist) {
-  _origUpdate(title, artist);
-  if (currentStation) updateMediaSession(title, artist, currentStation);
 }
 
 loadStations();
