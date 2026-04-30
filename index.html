@@ -141,7 +141,7 @@ const WANTED = [
   { key:'cidade',    country:'BR', label:'Rádio Cidade',    search:'Radio Cidade',    genre:'Pop / Hits' },
   { key:'planet',    country:'GB', label:'Planet Rock',     search:'Planet Rock',     genre:'Rock' },
   { key:'absrock',   country:'GB', label:'Absolute Radio',  search:'Absolute Radio',  genre:'Rock' },
-  { key:'abs90s',    country:'GB', label:'Absolute 90s',    search:'Absolute Radio 90s', genre:'90s Rock' },
+  { key:'abs90s',    country:'GB', label:'Absolute 90s',    search:'Absolute Radio 90s', genre:'90s Rock', hardcoded:'https://media-ice.musicradio.com/AbsoluteRadio90sMP3' },
   { key:'talksport', country:'GB', label:'talkSPORT',       search:'talkSPORT',       genre:'Sport' },
   { key:'capital',   country:'GB', label:'Capital FM',      search:'Capital FM',      genre:'Pop' },
 ];
@@ -314,6 +314,7 @@ function stopMetaPolling() {
 
 // ── Radio Browser lookup ──────────────────────────────────────────────
 async function resolveStation(w) {
+  if (w.hardcoded) return { ...w, stream: w.hardcoded, uuid: null };
   try {
     const cc = w.country;
     const url = `https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(w.search)}&countrycode=${cc}&limit=10&hidebroken=true&order=votes&reverse=true`;
