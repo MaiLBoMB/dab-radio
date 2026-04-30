@@ -138,22 +138,22 @@
 <audio id="audio" preload="none"></audio>
 <script>
 const WANTED = [
-  { key:'radiox',    country:'GB', label:'Radio X',        search:'Radio X',        genre:'Rock / Alternative' },
-  { key:'talksport', country:'GB', label:'talkSPORT',      search:'talkSPORT',      genre:'Sport' },
-  { key:'capital',   country:'GB', label:'Capital FM',     search:'Capital FM',     genre:'Pop' },
-  { key:'planet',    country:'GB', label:'Planet Rock',    search:'Planet Rock',    genre:'Rock' },
-  { key:'absrock',   country:'GB', label:'Absolute Radio', search:'Absolute Radio', genre:'Rock' },
-  { key:'cidade',    country:'BR', label:'Rádio Cidade',   search:'Radio Cidade',   genre:'Pop / Hits' },
+  { key:'cidade',    country:'BR', label:'Rádio Cidade',    search:'Radio Cidade',    genre:'Pop / Hits' },
+  { key:'planet',    country:'GB', label:'Planet Rock',     search:'Planet Rock',     genre:'Rock' },
+  { key:'absrock',   country:'GB', label:'Absolute Radio',  search:'Absolute Radio',  genre:'Rock' },
+  { key:'abs90s',    country:'GB', label:'Absolute 90s',    search:'Absolute Radio 90s', genre:'90s Rock' },
+  { key:'talksport', country:'GB', label:'talkSPORT',       search:'talkSPORT',       genre:'Sport' },
+  { key:'capital',   country:'GB', label:'Capital FM',      search:'Capital FM',      genre:'Pop' },
 ];
 
 const SANEF_STATIONS = [
   { key:'sanef-idf',
-    label:'Sanef 107.7 Paris Regions',
+    label:'Sanef 107.7 Paris – Dijon',
     sub:'Paris & Île-de-France',
     stream:'https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3',
     box:[48.1, 49.2, 1.4, 3.6] },
   { key:'sanef-regions',
-    label:'Sanef 107.7 Régions',
+    label:'Sanef Lyon – Avignon',
     sub:'Nord, Est & Ouest motorways',
     stream:'https://sanef.ice.infomaniak.ch/sanef1077-regions.mp3',
     box:[47.0, 51.1, -1.8, 8.0] },
@@ -179,7 +179,10 @@ function setStatus(txt, err) {
 }
 
 // ── Now playing metadata ──────────────────────────────────────────────
-function _renderTrack(title, artist) {
+// Uses RadioBrowser's station metadata endpoint + Shoutcast/Icecast title fallback
+let currentMeta = { title: '', artist: '' };
+
+function updateTrackDisplay(title, artist) {
   const el = document.getElementById('np-track');
   if (!title && !artist) {
     el.innerHTML = `<span class="np-track-empty">Song info not available for this stream</span>`;
@@ -193,11 +196,6 @@ function _renderTrack(title, artist) {
     </div>`;
 }
 
-function updateTrackDisplay(title, artist) {
-  _renderTrack(title, artist);
-  if (currentStation) updateMediaSession(title, artist, currentStation);
-}
-
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -205,6 +203,7 @@ function escHtml(s) {
 function parseTitleArtist(raw) {
   if (!raw) return { title:'', artist:'' };
   raw = raw.trim();
+  // Common formats: "Artist - Title" or "Title - Artist" or just "Title"
   const sep = raw.indexOf(' - ');
   if (sep > 0) {
     return { artist: raw.slice(0, sep).trim(), title: raw.slice(sep + 3).trim() };
@@ -212,80 +211,48 @@ function parseTitleArtist(raw) {
   return { title: raw, artist: '' };
 }
 
-async function fetchIcecastViaProxy(statusUrl, mount) {
-  const proxies = [
-    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    u => `https://corsproxy.io/?${u}`,
-  ];
-  for (const proxy of proxies) {
-    try {
-      const r = await fetch(proxy(statusUrl), { signal: AbortSignal.timeout(6000) });
-      if (!r.ok) continue;
-      const data = await r.json();
-      const sources = data?.icestats?.source;
-      if (!sources) continue;
-      const arr = Array.isArray(sources) ? sources : [sources];
-      const src = arr.find(s => s.listenurl && s.listenurl.includes(mount)) || arr[0];
-      if (src?.title) return src.title;
-    } catch(e) {}
-  }
-  return null;
-}
-
 async function fetchMeta(station) {
   if (!station) return;
 
-  // Method 1: Icecast status — try direct first (works for Infomaniak/Sanef), then proxy
+  // Method 1: Radio Browser now-playing via station UUID
+  if (station.uuid) {
+    try {
+      const r = await fetch(`https://de1.api.radio-browser.info/json/stations/byuuid/${station.uuid}`, {
+        headers: { 'User-Agent': 'DABRadioApp/1.0' }
+      });
+      const data = await r.json();
+      if (data && data[0] && data[0].lastcheckok) {
+        // Try to get stream title via a metadata proxy
+      }
+    } catch(e) {}
+  }
+
+  // Method 2: Fetch Icecast/Shoutcast metadata via stream URL status page
   if (station.stream) {
     try {
+      // Many Icecast servers expose /status-json.xsl or ?json at the stream host
       const u = new URL(station.stream);
-      const statusUrl = `${u.protocol}//${u.host}/status-json.xsl`;
-      const mount = u.pathname.replace(/\.mp3$/i, '');
-      let raw = null;
+      const base = `${u.protocol}//${u.host}`;
+      const mount = u.pathname;
 
-      try {
-        const r = await fetch(statusUrl, { signal: AbortSignal.timeout(2000) });
-        if (r.ok) {
-          const data = await r.json();
-          const sources = data?.icestats?.source;
-          if (sources) {
-            const arr = Array.isArray(sources) ? sources : [sources];
-            const src = arr.find(s => s.listenurl && s.listenurl.includes(mount)) || arr[0];
-            raw = src?.title || null;
-          }
-        }
-      } catch(e) {}
-
-      if (!raw) raw = await fetchIcecastViaProxy(statusUrl, mount);
-
-      if (raw) {
-        const { title, artist } = parseTitleArtist(raw);
-        updateTrackDisplay(title, artist);
-        return;
-      }
-    } catch(e) {}
-  }
-
-  // Method 2: Bauer stations (Absolute Radio, Planet Rock) — their own now-playing endpoint
-  const bauerMap = { absrock: 'absolute', planet: 'planetrock' };
-  if (bauerMap[station.key]) {
-    try {
-      const r = await fetch(
-        `https://listenapi.planetradio.co.uk/api9.2/nowplaying/${bauerMap[station.key]}`,
-        { signal: AbortSignal.timeout(4000) }
-      );
+      // Try Icecast JSON status
+      const r = await fetch(`${base}/status-json.xsl`, { signal: AbortSignal.timeout(3000) });
       if (r.ok) {
         const data = await r.json();
-        // Walk every plausible shape the response could have
-        const np = data?.now_playing ?? data?.nowPlaying ?? data?.current ?? data?.data;
-        const title  = np?.title  ?? np?.song  ?? np?.name  ?? data?.title  ?? data?.song  ?? '';
-        const artist = np?.artist ?? np?.artist_name ?? np?.artistName ?? data?.artist ?? '';
-        if (title || artist) { updateTrackDisplay(title, artist); return; }
+        const sources = data?.icestats?.source;
+        const arr = Array.isArray(sources) ? sources : (sources ? [sources] : []);
+        const src = arr.find(s => s.listenurl && s.listenurl.includes(mount.replace('.mp3','')))
+                 || arr[0];
+        if (src && src.title) {
+          const { title, artist } = parseTitleArtist(src.title);
+          updateTrackDisplay(title, artist);
+          return;
+        }
       }
     } catch(e) {}
   }
 
-  // Method 3: BBC Radio metadata API
+  // Method 3: BBC Radio uses their own metadata API
   const bbcMap = {
     bbcr1:  'bbc_radio_one',
     bbcr2:  'bbc_radio_two',
@@ -312,7 +279,7 @@ async function fetchMeta(station) {
     } catch(e) {}
   }
 
-  // Method 5: RadioBrowser now-playing (community)
+  // Method 4: MusicBrainz-style lookup via RadioBrowser now-playing (community)
   if (station.uuid) {
     try {
       const r = await fetch(
@@ -329,15 +296,13 @@ async function fetchMeta(station) {
     } catch(e) {}
   }
 
-  // Nothing worked — show genre as a soft fallback
-  const genre = station.genre || station.sub || '';
-  document.getElementById('np-track').innerHTML =
-    `<span class="np-track-empty">${escHtml(genre || 'No track info available')}</span>`;
+  // Fallback: show genre
+  updateTrackDisplay('', '');
 }
 
 function startMetaPolling(station) {
   if (metaTimer) clearInterval(metaTimer);
-  _renderTrack('', '');
+  updateTrackDisplay('', '');
   fetchMeta(station);
   metaTimer = setInterval(() => fetchMeta(station), 15000);
 }
@@ -387,7 +352,8 @@ function tryGeolocation() {
     if (newKey !== prevKey) {
       render();
       if (match) {
-        // Auto-play on zone entry, or when already on a Sanef station (zone change while driving)
+        // Entered a new Sanef zone — auto-play if nothing else is playing,
+        // or if we were already on a Sanef station (zone change while driving)
         const onSanef = currentStation && SANEF_STATIONS.some(s => s.key === currentStation.key);
         if (!isPlaying || onSanef) {
           playManual(match);
@@ -439,6 +405,7 @@ function render() {
   </div>`;
 
   if (driveMode) {
+    // Driving mode — big list with prev/next
     const all = getAllStationsOrdered();
     let html = carplayBar;
     html += `<div class="drive-nav">
@@ -549,7 +516,6 @@ function startPlay(s) {
     const p = document.getElementById('pulse'); if (p) p.style.display = 'inline-block';
     setStatus('Live');
     updatePlayBtn();
-    updateMediaSession('', '', s);
     startMetaPolling(s);
   }).catch(() => {
     setStatus('Stream unavailable', true);
@@ -595,11 +561,15 @@ audio.addEventListener('error', () => {
 
 // All stations in order for prev/next navigation
 function getAllStationsOrdered() {
-  const list = [];
-  resolvedStations.filter(s => s.country === 'GB').forEach(s => list.push({ key:s.key, label:s.label, country:s.country, genre:s.genre, stream:s.stream, uuid:s.uuid }));
-  SANEF_STATIONS.forEach(s => list.push({ key:s.key, label:s.label, country:'FR', genre:s.sub, stream:s.stream, uuid:null }));
-  resolvedStations.filter(s => s.country === 'BR').forEach(s => list.push({ key:s.key, label:s.label, country:s.country, genre:s.genre, stream:s.stream, uuid:s.uuid }));
-  return list;
+  const order = ['cidade','planet','absrock','abs90s','sanef-idf','sanef-regions','talksport','capital'];
+  const all = [];
+  order.forEach(key => {
+    const rb = resolvedStations.find(s => s.key === key);
+    if (rb) { all.push({ key:rb.key, label:rb.label, country:rb.country, genre:rb.genre, stream:rb.stream, uuid:rb.uuid }); return; }
+    const san = SANEF_STATIONS.find(s => s.key === key);
+    if (san) all.push({ key:san.key, label:san.label, country:'FR', genre:san.sub, stream:san.stream, uuid:null });
+  });
+  return all;
 }
 
 function getCurrentIndex() {
@@ -611,17 +581,19 @@ function playNext() {
   const all = getAllStationsOrdered();
   if (!all.length) return;
   const idx = getCurrentIndex();
-  startPlay(all[(idx + 1) % all.length]);
+  const next = all[(idx + 1) % all.length];
+  startPlay(next);
 }
 
 function playPrev() {
   const all = getAllStationsOrdered();
   if (!all.length) return;
   const idx = getCurrentIndex();
-  startPlay(all[(idx - 1 + all.length) % all.length]);
+  const prev = all[(idx - 1 + all.length) % all.length];
+  startPlay(prev);
 }
 
-// ── Media Session API — lock screen / CarPlay / steering wheel ─────────
+// Media Session API — lock screen, CarPlay controls, steering wheel buttons
 function updateMediaSession(title, artist, station) {
   if (!('mediaSession' in navigator)) return;
   navigator.mediaSession.metadata = new MediaMetadata({
@@ -638,6 +610,12 @@ function updateMediaSession(title, artist, station) {
   navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
   navigator.mediaSession.setActionHandler('nexttrack',     () => playNext());
   navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+}
+
+const _origUpdate = updateTrackDisplay;
+function updateTrackDisplay(title, artist) {
+  _origUpdate(title, artist);
+  if (currentStation) updateMediaSession(title, artist, currentStation);
 }
 
 loadStations();
