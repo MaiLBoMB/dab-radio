@@ -1,625 +1,777 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Radio">
-  <meta name="theme-color" content="#0f0f0f">
-  <meta name="description" content="Personal DAB Radio Player — UK, France, Brazil">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon.png">
-  <title>DAB Radio</title>
-  <style>
-    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-    :root {
-      --bg:#0f0f0f; --bg2:#1a1a1a; --bg3:#252525;
-      --border:rgba(255,255,255,0.1); --border2:rgba(255,255,255,0.2);
-      --text:#f0f0f0; --text2:#999; --text3:#555;
-      --accent:#1D9E75; --accent2:#534AB7;
-      --radius:12px; --radius-lg:16px;
-    }
-    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
-    #app { max-width:680px; margin:0 auto; padding:1.5rem 1rem 4rem; }
-    .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
-    .header h1 { font-size:24px; font-weight:700; letter-spacing:-0.5px; }
-    #status-txt { font-size:12px; color:var(--text2); }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0c10">
+<title>Drive Radio</title>
+<style>
+  :root{
+    --bg:#0b0c10;
+    --panel:#15171d;
+    --panel-2:#1c1f27;
+    --text:#f2f3f5;
+    --dim:#8a8f9c;
+    --accent:#ff8a00;
+    --safe-top:env(safe-area-inset-top,0px);
+    --safe-bottom:env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none}
+  html,body{height:100%}
+  body{
+    background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex;flex-direction:column;
+    height:100dvh;overflow:hidden;
+    padding-top:var(--safe-top);
+  }
 
-    /* Now playing card */
-    .now-playing { background:var(--bg2); border-radius:var(--radius-lg); border:0.5px solid var(--border); padding:1.25rem; margin-bottom:2rem; }
-    .np-label { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px; }
-    .np-station { font-size:20px; font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-    .np-genre { font-size:13px; color:var(--text2); margin-bottom:10px; }
+  #banner{
+    display:none;background:#3b2a00;color:#ffd27a;font-size:14px;line-height:1.45;
+    padding:12px 16px;border-bottom:1px solid #5b4200;user-select:text;
+  }
+  #banner.show{display:block}
+  #banner b{color:#ffe7b0}
 
-    /* Song metadata strip */
-    .np-track { background:var(--bg3); border-radius:var(--radius); padding:10px 14px; margin-bottom:14px; min-height:44px; display:flex; align-items:center; gap:10px; }
-    .np-track-icon { font-size:18px; flex-shrink:0; }
-    .np-track-info { flex:1; overflow:hidden; }
-    .np-title { font-size:14px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .np-artist { font-size:12px; color:var(--text2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .np-track-empty { font-size:13px; color:var(--text3); font-style:italic; }
+  /* ---------- Now playing ---------- */
+  #nowPlaying{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:8px 20px 0;min-height:0;position:relative;
+  }
+  #stationBadge{
+    font-size:clamp(13px,3.5vw,16px);font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:8px;transition:color .3s;
+  }
+  #stationName{
+    font-size:clamp(30px,8vw,52px);font-weight:800;line-height:1.05;letter-spacing:-.01em;
+  }
+  #trackName{
+    font-size:clamp(17px,4.6vw,24px);font-weight:600;color:var(--text);
+    margin-top:10px;min-height:1.3em;opacity:.92;max-width:92vw;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  #trackName:empty{opacity:0}
+  #statusRow{display:flex;align-items:center;gap:10px;margin-top:10px;min-height:26px}
+  #statusDot{width:12px;height:12px;border-radius:50%;background:var(--dim);transition:background .3s}
+  #statusDot.live{background:#34d069;box-shadow:0 0 12px #34d06988;animation:pulse 1.6s infinite}
+  #statusDot.buffering{background:var(--accent);animation:pulse .7s infinite}
+  #statusDot.error{background:#ff4d4d}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  #statusText{font-size:clamp(14px,3.8vw,17px);color:var(--dim);font-weight:600;user-select:text}
+  #glow{
+    position:absolute;inset:0;pointer-events:none;opacity:.55;transition:background 1s;
+    background:radial-gradient(60% 45% at 50% 42%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
+  }
 
-    .controls { display:flex; align-items:center; gap:16px; }
-    .play-btn { width:56px; height:56px; border-radius:50%; border:0.5px solid var(--border2); background:var(--bg3); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; -webkit-tap-highlight-color:transparent; }
-    .play-btn:active { background:#333; }
-    .play-btn svg { width:24px; height:24px; fill:var(--text); }
-    .vol-wrap { display:flex; align-items:center; gap:10px; flex:1; }
-    input[type=range] { -webkit-appearance:none; appearance:none; flex:1; height:4px; border-radius:2px; background:var(--bg3); outline:none; cursor:pointer; }
-    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--text); cursor:pointer; }
-    input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%; background:var(--text); border:none; cursor:pointer; }
-    .vol-out { font-size:12px; color:var(--text2); min-width:28px; text-align:right; }
-    .pulse { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--accent); animation:pulse 1.2s ease-in-out infinite; flex-shrink:0; }
-    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.6)} }
+  /* ---------- Transport ---------- */
+  #transport{
+    display:flex;align-items:center;justify-content:center;gap:4vw;
+    padding:6px 16px 14px;
+  }
+  .tbtn{
+    border:none;border-radius:50%;cursor:pointer;color:var(--text);
+    background:var(--panel);display:flex;align-items:center;justify-content:center;
+    transition:transform .08s, background .2s;
+  }
+  .tbtn:active{transform:scale(.93);background:var(--panel-2)}
+  .skip{width:clamp(76px,20vw,104px);height:clamp(76px,20vw,104px)}
+  .skip svg{width:46%;height:46%;fill:currentColor}
+  #playBtn{
+    width:clamp(110px,30vw,150px);height:clamp(110px,30vw,150px);
+    background:var(--accent);color:#0b0c10;box-shadow:0 8px 32px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  #playBtn svg{width:44%;height:44%;fill:currentColor}
 
-    /* Country sections */
-    .country-section { margin-bottom:2rem; }
-    .country-heading { display:flex; align-items:center; gap:8px; margin-bottom:0.75rem; }
-    .country-heading span { font-size:13px; font-weight:600; color:var(--text2); text-transform:uppercase; letter-spacing:0.07em; }
-    .station-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
-    .station-card { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:18px 16px 14px; cursor:pointer; transition:border-color 0.15s,background 0.15s; position:relative; min-height:90px; -webkit-tap-highlight-color:transparent; display:flex; flex-direction:column; justify-content:space-between; }
-    .station-card:active { background:var(--bg3); }
-    .station-card.active { border-color:var(--accent); background:var(--bg3); }
-    .s-name { font-size:15px; font-weight:600; line-height:1.3; color:var(--text); }
-    .s-genre { font-size:12px; color:var(--text2); margin-top:6px; }
-    .s-flag { font-size:18px; margin-bottom:8px; }
+  /* ---------- Presets ---------- */
+  #presets{
+    display:grid;grid-template-columns:repeat(2,1fr);gap:12px;
+    padding:0 16px calc(14px + var(--safe-bottom));
+  }
+  .preset{
+    border:none;border-radius:20px;cursor:pointer;text-align:left;
+    background:var(--panel);color:var(--text);
+    padding:16px 18px;min-height:clamp(72px,10vh,96px);
+    display:flex;flex-direction:column;justify-content:center;gap:4px;
+    border-left:6px solid var(--pc,#555);
+    transition:transform .08s, background .2s;
+  }
+  .preset:active{transform:scale(.97)}
+  .preset.active{background:color-mix(in srgb, var(--pc,#555) 22%, var(--panel));outline:2px solid var(--pc,#555)}
+  .preset .pname{font-size:clamp(16px,4.4vw,20px);font-weight:800;line-height:1.15}
+  .preset .pfreq{font-size:clamp(12px,3.2vw,14px);font-weight:700;color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
 
-    /* Sanef banner */
-    .sanef-banner { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:12px 14px; margin-bottom:1rem; display:flex; align-items:flex-start; gap:10px; }
-    .sanef-icon { font-size:20px; flex-shrink:0; margin-top:1px; }
-    .sanef-info { flex:1; }
-    .sanef-title { font-size:13px; font-weight:600; color:var(--text); }
-    .sanef-sub { font-size:12px; color:var(--text2); margin-top:2px; }
-    .sanef-btn { font-size:12px; padding:6px 12px; border-radius:8px; border:0.5px solid var(--border2); background:transparent; color:var(--text); cursor:pointer; flex-shrink:0; margin-top:2px; -webkit-tap-highlight-color:transparent; }
-    .sanef-btn:active { background:var(--bg3); }
+  /* ---------- Top bar ---------- */
+  #topbar{display:flex;justify-content:flex-end;padding:8px 14px 0}
+  #gear{
+    border:none;background:transparent;color:var(--dim);cursor:pointer;
+    width:52px;height:52px;border-radius:50%;font-size:26px;
+  }
+  #gear:active{background:var(--panel)}
 
-    .loading { padding:3rem 0; text-align:center; color:var(--text2); font-size:14px; }
-    .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--text3); margin:0 3px; animation:ldot 1.2s ease-in-out infinite; }
-    .dot:nth-child(2){animation-delay:0.2s} .dot:nth-child(3){animation-delay:0.4s}
-    @keyframes ldot{0%,80%,100%{transform:scale(0.6);opacity:0.4}40%{transform:scale(1);opacity:1}}
+  /* ---------- Geo auto-tune chip ---------- */
+  #geoChip{
+    display:none;margin-top:12px;font-size:13px;font-weight:800;letter-spacing:.1em;
+    padding:7px 16px;border-radius:999px;background:var(--panel);color:var(--dim);
+    text-transform:uppercase;position:relative;z-index:1;
+  }
+  #geoChip.armed{display:inline-block}
+  #geoChip.inside{
+    display:inline-block;color:var(--text);
+    background:color-mix(in srgb, var(--accent) 28%, var(--panel));
+    outline:1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  }
+  .stItem .ssub.wrap{white-space:normal;line-height:1.35}
 
-    /* CarPlay / driving mode */
-    .carplay-bar { display:flex; align-items:center; justify-content:space-between; background:var(--bg2); border-radius:var(--radius); border:0.5px solid var(--border); padding:10px 16px; margin-bottom:1.5rem; }
-    .carplay-bar span { font-size:13px; color:var(--text2); }
-    .carplay-toggle { padding:7px 16px; border-radius:20px; border:0.5px solid var(--border2); background:transparent; color:var(--text); font-size:13px; font-weight:500; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-    .carplay-toggle.on { background:var(--accent); border-color:var(--accent); color:#fff; }
-
-    /* Driving mode station list */
-    .drive-grid { display:flex; flex-direction:column; gap:12px; }
-    .drive-card { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius-lg); padding:22px 20px; cursor:pointer; display:flex; align-items:center; gap:16px; min-height:80px; -webkit-tap-highlight-color:transparent; transition:border-color 0.15s, background 0.15s; }
-    .drive-card:active { background:var(--bg3); }
-    .drive-card.active { border-color:var(--accent); background:var(--bg3); border-width:1.5px; }
-    .drive-flag { font-size:26px; flex-shrink:0; }
-    .drive-info { flex:1; }
-    .drive-name { font-size:18px; font-weight:700; color:var(--text); line-height:1.2; }
-    .drive-genre { font-size:13px; color:var(--text2); margin-top:4px; }
-    .drive-playing { width:10px; height:10px; border-radius:50%; background:var(--accent); animation:pulse 1.2s ease-in-out infinite; flex-shrink:0; }
-
-    /* Prev/Next bar in driving mode */
-    .drive-nav { display:flex; gap:10px; margin-bottom:1.5rem; }
-    .drive-nav-btn { flex:1; padding:18px; border-radius:var(--radius-lg); border:0.5px solid var(--border2); background:var(--bg2); color:var(--text); font-size:22px; cursor:pointer; -webkit-tap-highlight-color:transparent; display:flex; align-items:center; justify-content:center; gap:10px; }
-    .drive-nav-btn span { font-size:15px; font-weight:600; }
-    .drive-nav-btn:active { background:var(--bg3); }
-
-    @media(max-width:420px){
-      .station-grid { grid-template-columns:1fr 1fr; }
-      .s-name { font-size:14px; }
-    }
-  </style>
+  /* ---------- Settings sheet ---------- */
+  #sheet{
+    position:fixed;inset:0;background:rgba(5,6,8,.92);backdrop-filter:blur(6px);
+    display:none;flex-direction:column;z-index:10;
+    padding:calc(14px + var(--safe-top)) 16px calc(16px + var(--safe-bottom));
+    overflow-y:auto;
+  }
+  #sheet.open{display:flex}
+  #sheet h2{font-size:22px;margin-bottom:4px}
+  #sheet p.hint{color:var(--dim);font-size:14px;margin-bottom:16px;line-height:1.4;user-select:text}
+  .srow{display:flex;gap:10px;margin-bottom:10px}
+  .srow input{
+    flex:1;background:var(--panel);border:1px solid #2a2e38;border-radius:14px;
+    color:var(--text);font-size:16px;padding:14px 16px;min-width:0;user-select:text;-webkit-user-select:text;
+  }
+  .srow button, .sheetbtn{
+    background:var(--accent);border:none;border-radius:14px;color:#0b0c10;
+    font-size:16px;font-weight:800;padding:14px 18px;cursor:pointer;
+  }
+  .sheetbtn.ghost{background:var(--panel);color:var(--text)}
+  #results{margin:8px 0 18px}
+  .result, .stItem{
+    background:var(--panel);border-radius:14px;padding:12px 14px;margin-bottom:8px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .result .meta, .stItem .meta{flex:1;min-width:0}
+  .result .rname, .stItem .sname{font-weight:700;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .result .rsub, .stItem .ssub{color:var(--dim);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;user-select:text}
+  .miniBtn{
+    background:var(--panel-2);border:1px solid #2a2e38;border-radius:10px;color:var(--text);
+    font-size:14px;font-weight:700;padding:10px 14px;cursor:pointer;flex-shrink:0;
+  }
+  .miniBtn.danger{color:#ff6b6b}
+  #closeSheet{margin-top:auto}
+  h3.sec{font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:18px 0 8px}
+</style>
 </head>
 <body>
-<div id="app">
-  <div class="header">
-    <h1>&#128251; Radio</h1>
-    <span id="status-txt">Loading...</span>
-  </div>
 
-  <div class="now-playing">
-    <div class="np-label">Now playing</div>
-    <div class="np-station" id="np-station">Select a station</div>
-    <div class="np-genre" id="np-genre">Loading stations...</div>
-    <div class="np-track" id="np-track">
-      <span class="np-track-empty">No station selected</span>
-    </div>
-    <div class="controls">
-      <button class="play-btn" onclick="togglePlay()" aria-label="Play / Pause">
-        <svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
-      </button>
-      <div class="vol-wrap">
-        <span style="font-size:16px;color:var(--text2)">&#128266;</span>
-        <input type="range" min="0" max="100" value="80" step="1" id="vol" oninput="setVol(this.value)">
-        <span class="vol-out" id="vol-out">80</span>
-      </div>
-    </div>
-  </div>
+<div id="banner"></div>
 
-  <div id="main-list"></div>
+<div id="topbar"><button id="gear" aria-label="Settings">&#9881;</button></div>
+
+<div id="nowPlaying">
+  <div id="glow"></div>
+  <div id="stationBadge">DAB &middot; PRESET 1</div>
+  <div id="stationName">&mdash;</div>
+  <div id="trackName"></div>
+  <div id="statusRow"><div id="statusDot"></div><div id="statusText">Tap play to start</div></div>
+  <div id="geoChip"></div>
 </div>
-<audio id="audio" preload="none"></audio>
+
+<div id="transport">
+  <button class="tbtn skip" id="prevBtn" aria-label="Previous station">
+    <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zM21 6l-10 6 10 6z"/></svg>
+  </button>
+  <button class="tbtn" id="playBtn" aria-label="Play / pause">
+    <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    <svg id="pauseIcon" viewBox="0 0 24 24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+  </button>
+  <button class="tbtn skip" id="nextBtn" aria-label="Next station">
+    <svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM3 6l10 6-10 6z"/></svg>
+  </button>
+</div>
+
+<div id="presets"></div>
+
+<div id="sheet">
+  <h2>Stations</h2>
+  <p class="hint">Search the worldwide radio directory to add a station, or paste a direct stream URL (.mp3 / .aac). Steering-wheel "next / previous track" buttons switch presets in order.</p>
+
+  <h3 class="sec">Automatic Sanef 107.7</h3>
+  <div class="stItem">
+    <div class="meta">
+      <div class="sname">Switch by location</div>
+      <div class="ssub wrap">Auto-tunes to Sanef 107.7 when you're driving its motorways (A1, A2, A4, A13, A14, A16, A26, A29) and returns to your previous station when you leave. Needs location permission and HTTPS.</div>
+    </div>
+    <button class="miniBtn" id="geoToggle">Off</button>
+  </div>
+
+  <h3 class="sec">Search directory</h3>
+  <div class="srow">
+    <input id="q" type="text" placeholder="e.g. Radio Cidade" enterkeyhint="search">
+    <button id="searchBtn">Search</button>
+  </div>
+  <div id="results"></div>
+
+  <h3 class="sec">Add by URL</h3>
+  <div class="srow"><input id="mName" type="text" placeholder="Station name"></div>
+  <div class="srow"><input id="mUrl" type="url" placeholder="https://stream...mp3"><button id="addManual">Add</button></div>
+
+  <h3 class="sec">Your presets</h3>
+  <div id="stationList"></div>
+
+  <button class="sheetbtn ghost" id="closeSheet">Done</button>
+</div>
+
+<audio id="player" preload="none"></audio>
+
 <script>
-const WANTED = [
-  { key:'cidade',    country:'BR', label:'Rádio Cidade',    search:'Radio Cidade',    genre:'Pop / Hits' },
-  { key:'planet',    country:'GB', label:'Planet Rock',     search:'Planet Rock',     genre:'Rock' },
-  { key:'absrock',   country:'GB', label:'Absolute Radio',  search:'Absolute Radio',  genre:'Rock' },
-  { key:'abs90s',    country:'GB', label:'Absolute 90s',    search:'Absolute Radio 90s', genre:'90s Rock', hardcoded:'https://media-ice.musicradio.com/AbsoluteRadio90sMP3' },
-  { key:'talksport', country:'GB', label:'talkSPORT',       search:'talkSPORT',       genre:'Sport' },
-  { key:'capital',   country:'GB', label:'Capital FM',      search:'Capital FM',      genre:'Pop' },
-];
+(() => {
+  const epoch = () => Math.floor(Date.now()/1000);
 
-const SANEF_STATIONS = [
-  { key:'sanef-idf',
-    label:'Sanef 107.7 Paris – Dijon',
-    sub:'Paris & Île-de-France',
-    stream:'https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3',
-    box:[48.1, 49.2, 1.4, 3.6] },
-  { key:'sanef-regions',
-    label:'Sanef Lyon – Avignon',
-    sub:'Nord, Est & Ouest motorways',
-    stream:'https://sanef.ice.infomaniak.ch/sanef1077-regions.mp3',
-    box:[47.0, 51.1, -1.8, 8.0] },
-];
+  // Default presets. urls = ordered fallbacks tried automatically.
+  // dynamic:true URLs get a fresh epoch key appended (required by Bauer/Planet Rock).
+  // bauerCodes: station codes for Bauer's now-playing API.
+  const DEFAULTS = [
+    {
+      id:'sanef-idf', name:'Sanef 107.7', sub:'107.7 FM · Île-de-France', color:'#ff8a00',
+      urls:['https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3']
+    },
+    {
+      id:'sanef-reg', name:'Sanef 107.7 Régions', sub:'107.7 FM · Nord / Est / Ouest', color:'#ffb340',
+      urls:[
+        'https://sanef.ice.infomaniak.ch/sanef1077-regions.mp3',
+        'https://sanef.ice.infomaniak.ch/sanef1077-nord.mp3'
+      ]
+    },
+    {
+      id:'planetrock', name:'Planet Rock', sub:'DAB · UK', color:'#e23b3b', dynamic:true,
+      bauerCodes:['pln','prk','planetrock'],
+      urls:[
+        'https://stream-mz.planetradio.co.uk/planetrock.mp3',
+        'https://stream-mz.planetradio.co.uk/planetrock.aac'
+      ]
+    },
+    {
+      id:'abs90s', name:'Absolute 90s', sub:'DAB · UK', color:'#2bb3ff', dynamic:true,
+      bauerCodes:['a9s','ab9','a90','absolute90s'],
+      urls:[
+        'https://stream-mz.planetradio.co.uk/absolute90s.mp3',
+        'https://stream-mz.planetradio.co.uk/absoluteradio90s.mp3',
+        'https://stream-mz.planetradio.co.uk/absolute90s.aac'
+      ]
+    },
+    {
+      id:'abscr', name:'Absolute Classic Rock', sub:'DAB · UK', color:'#ffd23b', dynamic:true,
+      bauerCodes:['acr','abcr','acl','absoluteclassicrock'],
+      urls:[
+        'https://stream-mz.planetradio.co.uk/absoluteclassicrock.mp3',
+        'https://stream-mz.planetradio.co.uk/absolutecr.mp3',
+        'https://stream-mz.planetradio.co.uk/absoluteclassicrock.aac'
+      ]
+    },
+    {
+      id:'cidade', name:'Rádio Cidade', sub:'102.9 · Rio de Janeiro', color:'#9b30d9',
+      urls:[], // resolved live from the radio directory below
+      rbSearch:'Radio Cidade', rbCountry:'BR'
+    }
+  ];
 
-const FLAGS = { GB:'🇬🇧', FR:'🇫🇷', BR:'🇧🇷' };
-const COUNTRY_NAMES = { GB:'United Kingdom', FR:'France — Motorway', BR:'Brazil' };
+  let stations = DEFAULTS.map(s => ({...s, urls:[...s.urls]}));
+  let current = 0;
+  let urlIdx = 0;
+  let wantPlaying = false;
+  let netOk = null; // null = unknown, true/false after probe
 
-let resolvedStations = [];
-let currentStation = null;
-let isPlaying = false;
-let geoStation = null;
-let metaTimer = null;
-let driveMode = true;
+  const $ = id => document.getElementById(id);
+  const player = $('player');
 
-const audio = document.getElementById('audio');
-audio.volume = 0.8;
-
-function setStatus(txt, err) {
-  const el = document.getElementById('status-txt');
-  el.textContent = txt;
-  el.style.color = err ? '#E24B4A' : 'var(--text2)';
-}
-
-// ── Now playing metadata ──────────────────────────────────────────────
-// Uses RadioBrowser's station metadata endpoint + Shoutcast/Icecast title fallback
-let currentMeta = { title: '', artist: '' };
-
-function updateTrackDisplay(title, artist) {
-  const el = document.getElementById('np-track');
-  if (!title && !artist) {
-    el.innerHTML = `<span class="np-track-empty">Song info not available for this stream</span>`;
-    return;
+  /* ---------------- environment probe ----------------
+     If we are running inside a sandboxed preview (e.g. a chat app's file
+     viewer), ALL outside connections are blocked by its security policy and
+     no stream can ever play. Detect it and tell the user clearly. */
+  async function probeNetwork(){
+    try{
+      const r = await fetch('https://all.api.radio-browser.info/json/config', {cache:'no-store'});
+      netOk = r.ok;
+    }catch(e){ netOk = false; }
+    if(netOk === false){
+      banner('<b>Streams are blocked in this window.</b> This preview sandbox does not allow internet audio. ' +
+        'Save this file and open it directly in <b>Safari or Chrome</b> (or host it on any web server) — everything will work there.');
+    }
+    return netOk;
   }
-  el.innerHTML = `
-    <span class="np-track-icon">&#127925;</span>
-    <div class="np-track-info">
-      <div class="np-title">${escHtml(title || 'Unknown title')}</div>
-      <div class="np-artist">${escHtml(artist || 'Unknown artist')}</div>
-    </div>`;
-}
+  function banner(html){ const b=$('banner'); b.innerHTML=html; b.classList.add('show'); }
 
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function parseTitleArtist(raw) {
-  if (!raw) return { title:'', artist:'' };
-  raw = raw.trim();
-  // Common formats: "Artist - Title" or "Title - Artist" or just "Title"
-  const sep = raw.indexOf(' - ');
-  if (sep > 0) {
-    return { artist: raw.slice(0, sep).trim(), title: raw.slice(sep + 3).trim() };
-  }
-  return { title: raw, artist: '' };
-}
-
-async function fetchMeta(station) {
-  if (!station) return;
-
-  // Method 1: Radio Browser now-playing via station UUID
-  if (station.uuid) {
-    try {
-      const r = await fetch(`https://de1.api.radio-browser.info/json/stations/byuuid/${station.uuid}`, {
-        headers: { 'User-Agent': 'DABRadioApp/1.0' }
-      });
-      const data = await r.json();
-      if (data && data[0] && data[0].lastcheckok) {
-        // Try to get stream title via a metadata proxy
+  /* ---------------- persistence (optional, best-effort) ---------------- */
+  async function loadSaved(){
+    try{
+      if(!window.storage) return;
+      const r = await window.storage.get('drive-radio-stations');
+      if(r && r.value){
+        const saved = JSON.parse(r.value);
+        if(Array.isArray(saved) && saved.length){
+          // bring in any default stations added since the list was last saved
+          DEFAULTS.forEach(d=>{
+            if(!saved.some(s=>s.id===d.id)) saved.push({...d, urls:[...d.urls]});
+          });
+          stations = saved;
+        }
       }
-    } catch(e) {}
+    }catch(e){ /* first run or no storage — keep defaults */ }
+  }
+  async function save(){
+    try{ if(window.storage) await window.storage.set('drive-radio-stations', JSON.stringify(stations)); }catch(e){}
   }
 
-  // Method 2: Fetch Icecast/Shoutcast metadata via stream URL status page
-  if (station.stream) {
-    try {
-      // Many Icecast servers expose /status-json.xsl or ?json at the stream host
-      const u = new URL(station.stream);
-      const base = `${u.protocol}//${u.host}`;
+  /* ---------------- radio directory (radio-browser.info) ---------------- */
+  const RB = 'https://all.api.radio-browser.info/json/stations/search';
+  async function rbSearch(name, country){
+    const p = new URLSearchParams({name, limit:'12', hidebroken:'true', order:'clickcount', reverse:'true'});
+    if(country) p.set('countrycode', country);
+    const res = await fetch(RB+'?'+p.toString());
+    if(!res.ok) throw new Error('directory error');
+    return res.json();
+  }
+  function playableUrl(item){
+    const u = item.url_resolved || item.url || '';
+    if(location.protocol === 'https:' && u.startsWith('http:')) return null; // mixed content would be blocked
+    const canHls = player.canPlayType('application/vnd.apple.mpegurl') !== '';
+    if(u.includes('.m3u8') && !canHls) return null; // plain <audio> can't do HLS on Chrome/Android
+    return u;
+  }
+  async function resolveStation(st){
+    if(st.urls.length || !st.rbSearch) return;
+    setStatus('buffering','Finding stream…');
+    try{
+      const list = await rbSearch(st.rbSearch, st.rbCountry);
+      const urls = list.map(playableUrl).filter(Boolean);
+      if(urls.length){ st.urls = urls.slice(0,4); save(); }
+      else setStatus('error','No stream found — use Search in settings');
+    }catch(e){
+      if(netOk === false) setStatus('error','Network blocked in this window');
+      else setStatus('error','Directory unreachable — check connection');
+    }
+  }
+
+  /* ---------------- playback ---------------- */
+  function streamUrl(st){
+    let u = st.urls[urlIdx];
+    if(!u) return null;
+    if(st.dynamic) u += (u.includes('?')?'&':'?') + 'aw_0_1st.skey=' + epoch();
+    return u;
+  }
+
+  function setStatus(kind, text){
+    const d = $('statusDot');
+    d.className = kind==='live'?'live':kind==='buffering'?'buffering':kind==='error'?'error':'';
+    $('statusText').textContent = text;
+  }
+
+  function renderNow(){
+    const st = stations[current];
+    document.documentElement.style.setProperty('--accent', st.color || '#ff8a00');
+    $('stationBadge').textContent = (st.sub || 'LIVE') + ' · PRESET ' + (current+1);
+    $('stationName').textContent = st.name;
+    document.querySelectorAll('.preset').forEach((b,i)=>b.classList.toggle('active', i===current));
+    updateMediaSession();
+  }
+
+  async function tune(i, autoplay = true){
+    if(typeof autoTuning !== 'undefined' && !autoTuning) returnTo = null; // a manual change wins over auto-return
+    current = (i + stations.length) % stations.length;
+    urlIdx = 0;
+    setTrack('');
+    renderNow();
+    const st = stations[current];
+    if(!st.urls.length && st.rbSearch) await resolveStation(st);
+    if(autoplay) play(); else setStatus('', 'Tap play to start');
+  }
+
+  function play(){
+    const st = stations[current];
+    const u = streamUrl(st);
+    if(!u){ setStatus('error','No stream URL — add one in settings'); return; }
+    wantPlaying = true;
+    setStatus('buffering','Connecting…');
+    player.src = u;
+    player.load();
+    player.play().catch(()=>{ /* retried on next tap */ });
+    showPlaying(true);
+    startMeta();
+  }
+  function stop(){
+    wantPlaying = false;
+    player.pause();
+    player.removeAttribute('src'); player.load(); // drop the live buffer so resume is live, not stale
+    setStatus('', 'Paused');
+    showPlaying(false);
+    stopMeta();
+  }
+  function toggle(){ wantPlaying ? stop() : play(); }
+
+  function showPlaying(on){
+    $('playIcon').style.display = on?'none':'';
+    $('pauseIcon').style.display = on?'':'none';
+    if('mediaSession' in navigator) navigator.mediaSession.playbackState = on?'playing':'paused';
+  }
+
+  player.addEventListener('playing', ()=> setStatus('live','Live'));
+  player.addEventListener('waiting', ()=> wantPlaying && setStatus('buffering','Buffering…'));
+  player.addEventListener('stalled', ()=> wantPlaying && setStatus('buffering','Buffering…'));
+  player.addEventListener('error', async ()=>{
+    if(!wantPlaying) return;
+    const st = stations[current];
+    if(urlIdx < st.urls.length - 1){ urlIdx++; play(); return; }
+    if(netOk === null) await probeNetwork();
+    if(netOk === false) setStatus('error','Network blocked — open in Safari/Chrome');
+    else setStatus('error','Stream unavailable (offline or geo-blocked)');
+  });
+
+  /* ---------------- now playing track metadata ----------------
+     Two sources, best-effort:
+     1. Bauer "now playing" API (Planet Rock and other UK Bauer stations)
+     2. Icecast status-json.xsl on the stream's own server (Sanef, many others)
+     The track is shown on screen AND pushed to the car display via Media Session. */
+  let metaTimer = null;
+  let lastTrack = '';
+  function startMeta(){ stopMeta(false); pollMeta(); metaTimer = setInterval(pollMeta, 15000); }
+  function stopMeta(clear = true){
+    if(metaTimer){ clearInterval(metaTimer); metaTimer = null; }
+    if(clear) setTrack('');
+  }
+  function setTrack(t){
+    t = (t||'').trim();
+    if(t === lastTrack) return;
+    lastTrack = t;
+    $('trackName').textContent = t;
+    updateMediaSession();
+  }
+
+  async function pollMeta(){
+    if(!wantPlaying) return;
+    const st = stations[current];
+    let track = '';
+    if(st.bauerCodes && st.bauerCodes.length){
+      track = await bauerNowPlaying(st);
+    }
+    if(!track && st.urls[urlIdx]){
+      track = await icecastNowPlaying(st.urls[urlIdx]);
+    }
+    setTrack(track);
+  }
+
+  async function bauerNowPlaying(st){
+    for(const code of st.bauerCodes){
+      try{
+        const r = await fetch('https://listenapi.planetradio.co.uk/api9.2/nowplaying/' + code, {cache:'no-store'});
+        if(!r.ok) continue;
+        const j = await r.json();
+        const it = Array.isArray(j) ? j[0] : j;
+        if(!it) continue;
+        const title  = it.TrackTitle || it.nowPlayingTrack || it.title || '';
+        const artist = it.TrackArtist || it.nowPlayingArtist || it.artist || '';
+        const out = [artist, title].filter(Boolean).join(' — ');
+        if(out){ st.bauerCodes = [code]; return out; } // lock onto the code that works
+      }catch(e){}
+    }
+    return '';
+  }
+
+  async function icecastNowPlaying(streamUrl){
+    try{
+      const u = new URL(streamUrl);
+      const r = await fetch(u.origin + '/status-json.xsl', {cache:'no-store'});
+      if(!r.ok) return '';
+      const j = await r.json();
+      let srcs = j.icestats && j.icestats.source;
+      if(!srcs) return '';
+      if(!Array.isArray(srcs)) srcs = [srcs];
       const mount = u.pathname;
-
-      // Try Icecast JSON status
-      const r = await fetch(`${base}/status-json.xsl`, { signal: AbortSignal.timeout(3000) });
-      if (r.ok) {
-        const data = await r.json();
-        const sources = data?.icestats?.source;
-        const arr = Array.isArray(sources) ? sources : (sources ? [sources] : []);
-        const src = arr.find(s => s.listenurl && s.listenurl.includes(mount.replace('.mp3','')))
-                 || arr[0];
-        if (src && src.title) {
-          const { title, artist } = parseTitleArtist(src.title);
-          updateTrackDisplay(title, artist);
-          return;
-        }
-      }
-    } catch(e) {}
+      const m = srcs.find(s => (s.listenurl||'').endsWith(mount)) || srcs[0];
+      if(!m) return '';
+      const t = m.title || m.yp_currently_playing || '';
+      return (typeof t === 'string') ? t : '';
+    }catch(e){ return ''; } // server has no status endpoint or no CORS — fine
   }
 
-  // Method 3: BBC Radio uses their own metadata API
-  const bbcMap = {
-    bbcr1:  'bbc_radio_one',
-    bbcr2:  'bbc_radio_two',
-    bbcr3:  'bbc_radio_three',
-    bbcr4:  'bbc_radio_four_fm',
-    bbc5l:  'bbc_radio_five_live',
-    bbc6:   'bbc_6music',
-    bbc1x:  'bbc_1xtra',
-  };
-  if (bbcMap[station.key]) {
-    try {
-      const r = await fetch(
-        `https://rms.api.bbc.co.uk/v2/services/${bbcMap[station.key]}/segments/latest?limit=1&experience=domestic&offset=0`,
-        { signal: AbortSignal.timeout(4000) }
-      );
-      const data = await r.json();
-      const seg = data?.data?.[0];
-      if (seg) {
-        const title  = seg.titles?.primary || seg.titles?.secondary || '';
-        const artist = seg.titles?.tertiary || '';
-        updateTrackDisplay(title, artist);
-        return;
-      }
-    } catch(e) {}
-  }
-
-  // Method 4: MusicBrainz-style lookup via RadioBrowser now-playing (community)
-  if (station.uuid) {
-    try {
-      const r = await fetch(
-        `https://de1.api.radio-browser.info/json/stations/byuuid/${station.uuid}`,
-        { headers:{'User-Agent':'DABRadioApp/1.0'}, signal: AbortSignal.timeout(4000) }
-      );
-      const data = await r.json();
-      const nowPlaying = data?.[0]?.now_playing;
-      if (nowPlaying) {
-        const { title, artist } = parseTitleArtist(nowPlaying);
-        updateTrackDisplay(title, artist);
-        return;
-      }
-    } catch(e) {}
-  }
-
-  // Fallback: show genre
-  updateTrackDisplay('', '');
-}
-
-function startMetaPolling(station) {
-  if (metaTimer) clearInterval(metaTimer);
-  updateTrackDisplay('', '');
-  fetchMeta(station);
-  metaTimer = setInterval(() => fetchMeta(station), 15000);
-}
-
-function stopMetaPolling() {
-  if (metaTimer) { clearInterval(metaTimer); metaTimer = null; }
-  document.getElementById('np-track').innerHTML = `<span class="np-track-empty">No station selected</span>`;
-}
-
-// ── Radio Browser lookup ──────────────────────────────────────────────
-async function resolveStation(w) {
-  if (w.hardcoded) return { ...w, stream: w.hardcoded, uuid: null };
-  try {
-    const cc = w.country;
-    const url = `https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(w.search)}&countrycode=${cc}&limit=10&hidebroken=true&order=votes&reverse=true`;
-    const r = await fetch(url, { headers:{'User-Agent':'DABRadioApp/1.0'} });
-    const data = await r.json();
-    const match = data.find(s => s.url_resolved && s.url_resolved.startsWith('https'))
-                || data.find(s => s.url_resolved);
-    if (match) return { ...w, stream: match.url_resolved, uuid: match.stationuuid };
-  } catch(e) {}
-  return null;
-}
-
-async function loadStations() {
-  document.getElementById('main-list').innerHTML = `<div class="loading"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
-  const results = await Promise.all(WANTED.map(resolveStation));
-  resolvedStations = results.filter(Boolean);
-  setStatus('Ready');
-  document.getElementById('np-genre').textContent = 'Choose a station below';
-  tryGeolocation();
-  render();
-}
-
-// ── Geolocation ───────────────────────────────────────────────────────
-function tryGeolocation() {
-  if (!navigator.geolocation) return;
-  navigator.geolocation.watchPosition(pos => {
-    const { latitude: lat, longitude: lon } = pos.coords;
-    const match = SANEF_STATIONS.find(s =>
-      lat >= s.box[0] && lat <= s.box[1] && lon >= s.box[2] && lon <= s.box[3]
-    );
-    const prevKey = geoStation ? geoStation.key : null;
-    const newKey  = match ? match.key : null;
-
-    geoStation = match || null;
-
-    if (newKey !== prevKey) {
-      render();
-      if (match) {
-        // Entered a new Sanef zone — auto-play if nothing else is playing,
-        // or if we were already on a Sanef station (zone change while driving)
-        const onSanef = currentStation && SANEF_STATIONS.some(s => s.key === currentStation.key);
-        if (!isPlaying || onSanef) {
-          playManual(match);
-          setStatus('Auto-switched: ' + match.label);
-        }
-      }
-    }
-  }, null, { enableHighAccuracy:false, maximumAge:30000, timeout:15000 });
-}
-
-function requestGeo() {
-  if (!navigator.geolocation) { setStatus('Geolocation not supported', true); return; }
-  setStatus('Getting location...');
-  navigator.geolocation.getCurrentPosition(pos => {
-    const { latitude: lat, longitude: lon } = pos.coords;
-    const match = SANEF_STATIONS.find(s =>
-      lat >= s.box[0] && lat <= s.box[1] && lon >= s.box[2] && lon <= s.box[3]
-    );
-    geoStation = match || null;
-    if (match) {
-      setStatus('Motorway detected: ' + match.label);
-      playManual(match);
-    } else {
-      setStatus('No Sanef motorway detected');
-    }
-    render();
-  }, () => setStatus('Location denied', true));
-}
-
-// ── Drive mode toggle ─────────────────────────────────────────────────
-function toggleDriveMode() {
-  driveMode = !driveMode;
-  render();
-  const btn = document.getElementById('drive-toggle');
-  if (btn) { btn.textContent = driveMode ? '🚗 Driving mode on' : '🚗 Driving mode'; btn.classList.toggle('on', driveMode); }
-}
-
-// ── Render ─────────────────────────────────────────────────────────────
-function render() {
-  const byCountry = {};
-  resolvedStations.forEach(s => {
-    if (!byCountry[s.country]) byCountry[s.country] = [];
-    byCountry[s.country].push(s);
-  });
-
-  const carplayBar = `<div class="carplay-bar">
-    <span>${driveMode ? 'Large buttons, easy tap' : 'Tap to enable large buttons for driving'}</span>
-    <button id="drive-toggle" class="carplay-toggle${driveMode?' on':''}" onclick="toggleDriveMode()">${driveMode ? '🚗 Driving mode on' : '🚗 Driving mode'}</button>
-  </div>`;
-
-  if (driveMode) {
-    // Driving mode — big list with prev/next
-    const all = getAllStationsOrdered();
-    let html = carplayBar;
-    html += `<div class="drive-nav">
-      <button class="drive-nav-btn" onclick="playPrev()"><span>&#9664;</span><span>Prev</span></button>
-      <button class="drive-nav-btn" onclick="playNext()"><span>Next</span><span>&#9654;</span></button>
-    </div>`;
-    html += `<div class="drive-grid">`;
-    all.forEach(s => {
-      const isActive = currentStation && currentStation.key === s.key;
-      const flag = FLAGS[s.country] || '📻';
-      const genre = s.genre || s.sub || '';
-      html += `<div class="drive-card${isActive?' active':''}" onclick="drivePlay('${s.key}')">
-        <span class="drive-flag">${flag}</span>
-        <div class="drive-info">
-          <div class="drive-name">${s.label}</div>
-          <div class="drive-genre">${genre}</div>
-        </div>
-        ${isActive && isPlaying ? '<div class="drive-playing"></div>' : ''}
-      </div>`;
+  /* ---------------- Media Session: steering wheel / CarPlay / Android Auto ---------------- */
+  function updateMediaSession(){
+    if(!('mediaSession' in navigator)) return;
+    const st = stations[current];
+    const art = svgArtwork(st);
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: lastTrack || st.name,                 // song on the car display when known
+      artist: lastTrack ? st.name : (st.sub || 'Live radio'),
+      album: 'Drive Radio',
+      artwork: [{src:art, sizes:'512x512', type:'image/svg+xml'}]
     });
-    html += `</div>`;
-    document.getElementById('main-list').innerHTML = html;
-    return;
+    try{
+      navigator.mediaSession.setActionHandler('play', ()=>play());
+      navigator.mediaSession.setActionHandler('pause', ()=>stop());
+      navigator.mediaSession.setActionHandler('stop', ()=>stop());
+      navigator.mediaSession.setActionHandler('previoustrack', ()=>tune(current-1));
+      navigator.mediaSession.setActionHandler('nexttrack', ()=>tune(current+1));
+      navigator.mediaSession.setActionHandler('seekbackward', ()=>tune(current-1));
+      navigator.mediaSession.setActionHandler('seekforward', ()=>tune(current+1));
+    }catch(e){}
+  }
+  function svgArtwork(st){
+    const name = (st.name||'').slice(0,10).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512">'
+      + '<rect width="512" height="512" rx="64" fill="' + (st.color||'#ff8a00') + '"/>'
+      + '<text x="50%" y="54%" font-family="Arial,Helvetica,sans-serif" font-size="84" font-weight="800" fill="#0b0c10" text-anchor="middle">' + name + '</text></svg>';
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
 
-  // Normal mode
-  let html = carplayBar;
-  if (byCountry['GB']) html += countrySection('GB', byCountry['GB']);
-
-  html += `<div class="country-section">`;
-  html += `<div class="country-heading"><span style="font-size:20px">${FLAGS['FR']}</span><span>${COUNTRY_NAMES['FR']}</span></div>`;
-  if (geoStation) {
-    html += `<div class="sanef-banner">
-      <span class="sanef-icon">&#128652;</span>
-      <div class="sanef-info">
-        <div class="sanef-title">Auto-detected: ${geoStation.label}</div>
-        <div class="sanef-sub">${geoStation.sub}</div>
-      </div>
-      <button class="sanef-btn" onclick='playManual(${JSON.stringify(geoStation).replace(/'/g,"&#39;")})'>Play</button>
-    </div>`;
-  } else {
-    html += `<div class="sanef-banner">
-      <span class="sanef-icon">&#128205;</span>
-      <div class="sanef-info">
-        <div class="sanef-title">Motorway auto-detect</div>
-        <div class="sanef-sub">Tap Locate when driving in France</div>
-      </div>
-      <button class="sanef-btn" onclick="requestGeo()">Locate</button>
-    </div>`;
+  /* ---------------- UI ---------------- */
+  function renderPresets(){
+    const box = $('presets'); box.innerHTML='';
+    stations.forEach((st,i)=>{
+      const b = document.createElement('button');
+      b.className = 'preset' + (i===current?' active':'');
+      b.style.setProperty('--pc', st.color || '#888');
+      b.innerHTML = '<div class="pname"></div><div class="pfreq"></div>';
+      b.querySelector('.pname').textContent = st.name;
+      b.querySelector('.pfreq').textContent = st.sub || 'Live stream';
+      b.onclick = ()=>tune(i);
+      box.appendChild(b);
+    });
   }
-  html += `<div class="station-grid">`;
-  SANEF_STATIONS.forEach(s => {
-    const isActive = currentStation && currentStation.key === s.key;
-    const isGeo = geoStation && geoStation.key === s.key;
-    html += `<div class="station-card${isActive?' active':''}" onclick='playManual(${JSON.stringify(s).replace(/'/g,"&#39;")})' style="${isGeo?'border-color:var(--accent);':''}">
-      <div><div class="s-flag">&#128739;</div><div class="s-name">${s.label}</div></div>
-      <div class="s-genre">${s.sub}</div>
-    </div>`;
-  });
-  html += `</div></div>`;
-  if (byCountry['BR']) html += countrySection('BR', byCountry['BR']);
-  document.getElementById('main-list').innerHTML = html;
-}
 
-function countrySection(cc, stations) {
-  let html = `<div class="country-section">`;
-  html += `<div class="country-heading"><span style="font-size:20px">${FLAGS[cc]}</span><span>${COUNTRY_NAMES[cc]||cc}</span></div>`;
-  html += `<div class="station-grid">`;
-  stations.forEach(s => {
-    const isActive = currentStation && currentStation.key === s.key;
-    html += `<div class="station-card${isActive?' active':''}" onclick="playResolved('${s.key}')">
-      <div><div class="s-flag">${FLAGS[cc]}</div><div class="s-name">${s.label}</div></div>
-      <div class="s-genre">${s.genre}</div>
-    </div>`;
-  });
-  html += `</div></div>`;
-  return html;
-}
-
-// ── Playback ───────────────────────────────────────────────────────────
-function playResolved(key) {
-  const s = resolvedStations.find(x => x.key === key);
-  if (s) startPlay({ key:s.key, label:s.label, country:s.country, genre:s.genre, stream:s.stream, uuid:s.uuid });
-}
-
-function drivePlay(key) {
-  const all = getAllStationsOrdered();
-  const s = all.find(x => x.key === key);
-  if (s) startPlay(s);
-}
-
-function playManual(s) {
-  startPlay({ key:s.key, label:s.label, country:s.country||'FR', genre:s.sub||'Motorway', stream:s.stream, uuid:null });
-}
-
-function startPlay(s) {
-  currentStation = s;
-  const flag = FLAGS[s.country] || '';
-  document.getElementById('np-station').innerHTML = `${flag} ${s.label} <span class="pulse" id="pulse" style="display:none"></span>`;
-  document.getElementById('np-genre').textContent = s.genre;
-  document.getElementById('np-track').innerHTML = `<span class="np-track-empty">Connecting...</span>`;
-  setStatus('Connecting...');
-  audio.pause();
-  audio.src = s.stream;
-  audio.load();
-  audio.play().then(() => {
-    isPlaying = true;
-    const p = document.getElementById('pulse'); if (p) p.style.display = 'inline-block';
-    setStatus('Live');
-    updatePlayBtn();
-    startMetaPolling(s);
-  }).catch(() => {
-    setStatus('Stream unavailable', true);
-    document.getElementById('np-genre').textContent = s.genre + ' — could not connect';
-    document.getElementById('np-track').innerHTML = `<span class="np-track-empty">Stream unavailable</span>`;
-    isPlaying = false; updatePlayBtn();
-    stopMetaPolling();
-  });
-  render();
-}
-
-function togglePlay() {
-  if (!currentStation) { setStatus('Select a station first'); return; }
-  if (isPlaying) {
-    audio.pause(); isPlaying = false;
-    const p = document.getElementById('pulse'); if (p) p.style.display = 'none';
-    setStatus('Paused');
-    stopMetaPolling();
-  } else {
-    audio.play().then(() => {
-      isPlaying = true;
-      const p = document.getElementById('pulse'); if (p) p.style.display = 'inline-block';
-      setStatus('Live');
-      startMetaPolling(currentStation);
-    }).catch(() => setStatus('Stream unavailable', true));
+  function renderStationList(){
+    const box = $('stationList'); box.innerHTML='';
+    stations.forEach((st,i)=>{
+      const row = document.createElement('div');
+      row.className='stItem';
+      row.innerHTML = '<div class="meta"><div class="sname"></div><div class="ssub"></div></div>'
+        + '<button class="miniBtn up">&#8593;</button><button class="miniBtn danger del">Remove</button>';
+      row.querySelector('.sname').textContent = (i+1)+'. '+st.name;
+      row.querySelector('.ssub').textContent = st.urls[0] || '(stream found automatically)';
+      row.querySelector('.up').onclick = ()=>{
+        if(i===0) return;
+        const t = stations[i-1]; stations[i-1]=stations[i]; stations[i]=t;
+        save(); renderPresets(); renderStationList(); renderNow();
+      };
+      row.querySelector('.del').onclick = ()=>{
+        if(stations.length<=1) return;
+        stations.splice(i,1);
+        if(current>=stations.length) current=0;
+        save(); renderPresets(); renderStationList(); renderNow();
+      };
+      box.appendChild(row);
+    });
   }
-  updatePlayBtn();
-}
 
-function updatePlayBtn() {
-  document.getElementById('play-icon').innerHTML = isPlaying
-    ? '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>'
-    : '<path d="M8 5v14l11-7z"/>';
-}
+  $('playBtn').onclick = toggle;
+  $('prevBtn').onclick = ()=>tune(current-1);
+  $('nextBtn').onclick = ()=>tune(current+1);
+  $('gear').onclick = ()=>{ renderStationList(); $('sheet').classList.add('open'); };
+  $('closeSheet').onclick = ()=>{ $('sheet').classList.remove('open'); renderPresets(); renderNow(); };
 
-function setVol(v) { audio.volume = v / 100; document.getElementById('vol-out').textContent = v; }
+  $('searchBtn').onclick = doSearch;
+  $('q').addEventListener('keydown', e=>{ if(e.key==='Enter') doSearch(); });
+  async function doSearch(){
+    const q = $('q').value.trim();
+    if(!q) return;
+    const box = $('results');
+    box.innerHTML = '<div class="result"><div class="meta"><div class="rname">Searching…</div></div></div>';
+    try{
+      const list = await rbSearch(q);
+      box.innerHTML='';
+      if(!list.length){ box.innerHTML='<div class="result"><div class="meta"><div class="rname">No results</div></div></div>'; return; }
+      list.forEach(item=>{
+        const u = playableUrl(item);
+        const row = document.createElement('div');
+        row.className='result';
+        row.innerHTML = '<div class="meta"><div class="rname"></div><div class="rsub"></div></div><button class="miniBtn">Add</button>';
+        row.querySelector('.rname').textContent = item.name;
+        row.querySelector('.rsub').textContent = [item.country, item.codec, item.bitrate? item.bitrate+'kbps':''].filter(Boolean).join(' · ');
+        const btn = row.querySelector('.miniBtn');
+        if(!u){ btn.disabled = true; btn.textContent='Not playable'; btn.style.opacity=.5; }
+        else btn.onclick = ()=>{
+          stations.push({ id:'c'+Date.now(), name:item.name.trim(), sub:item.country||'Live stream',
+            color:randColor(), urls:[u] });
+          save(); renderStationList(); btn.textContent='Added ✓'; btn.disabled=true;
+        };
+        box.appendChild(row);
+      });
+    }catch(e){
+      box.innerHTML = '<div class="result"><div class="meta"><div class="rname">' +
+        (netOk===false ? 'Network blocked in this window' : 'Directory unreachable') +
+        '</div></div></div>';
+    }
+  }
 
-audio.addEventListener('error', () => {
-  setStatus('Stream error', true); isPlaying = false; updatePlayBtn();
-  const p = document.getElementById('pulse'); if (p) p.style.display = 'none';
-  stopMetaPolling();
-});
+  $('addManual').onclick = ()=>{
+    const name = $('mName').value.trim() || 'Custom station';
+    const url = $('mUrl').value.trim();
+    if(!/^https?:\/\//.test(url)) return;
+    stations.push({id:'m'+Date.now(), name, sub:'Custom', color:randColor(), urls:[url]});
+    $('mName').value=''; $('mUrl').value='';
+    save(); renderStationList();
+  };
 
-// All stations in order for prev/next navigation
-function getAllStationsOrdered() {
-  const order = ['cidade','planet','absrock','abs90s','sanef-idf','sanef-regions','talksport','capital'];
-  const all = [];
-  order.forEach(key => {
-    const rb = resolvedStations.find(s => s.key === key);
-    if (rb) { all.push({ key:rb.key, label:rb.label, country:rb.country, genre:rb.genre, stream:rb.stream, uuid:rb.uuid }); return; }
-    const san = SANEF_STATIONS.find(s => s.key === key);
-    if (san) all.push({ key:san.key, label:san.label, country:'FR', genre:san.sub, stream:san.stream, uuid:null });
-  });
-  return all;
-}
+  function randColor(){
+    const c = ['#ff8a00','#e23b3b','#9b30d9','#2bb3ff','#34d069','#ffd23b','#ff5fa2'];
+    return c[Math.floor(Math.random()*c.length)];
+  }
 
-function getCurrentIndex() {
-  if (!currentStation) return -1;
-  return getAllStationsOrdered().findIndex(s => s.key === currentStation.key);
-}
+  /* ---------------- Sanef geofence auto-tune ----------------
+     Simplified corridors of the Sanef/SAPN motorway network as [lat,lon]
+     polylines. If a GPS fix lands within ENTER_KM of any corridor (twice in a
+     row, to ignore GPS jitter), the radio auto-tunes to Sanef 107.7 —
+     Île-de-France stream near Paris, Régions elsewhere. Leaving the corridor
+     by EXIT_KM (twice in a row) returns to the previous station. */
+  const SANEF_ROUTES = {
+    'A1' :[[48.97,2.49],[49.12,2.56],[49.33,2.70],[49.55,2.75],[49.70,2.77],[49.86,2.80],[50.10,2.80],[50.28,2.78],[50.45,2.95],[50.57,3.07]],
+    'A2' :[[49.98,2.93],[50.12,3.10],[50.25,3.30],[50.35,3.48],[50.40,3.60]],
+    'A4' :[[48.84,2.58],[48.87,2.80],[48.95,3.10],[49.05,3.40],[49.15,3.70],[49.25,3.98],[49.20,4.35],[49.10,4.90],[49.13,5.40],[49.10,5.80],[49.06,6.20],[48.95,6.70],[48.80,7.10],[48.65,7.45]],
+    'A13':[[48.92,2.18],[48.95,1.90],[49.00,1.60],[49.20,1.20],[49.32,1.02],[49.30,0.60],[49.25,0.30],[49.18,-0.25]],
+    'A14':[[48.90,2.22],[48.95,2.12],[49.00,2.04]],
+    'A16':[[49.10,2.22],[49.30,2.20],[49.55,2.10],[49.90,2.20],[50.10,1.85],[50.35,1.70],[50.55,1.62],[50.80,1.70],[50.95,2.10],[51.02,2.35]],
+    'A26':[[50.92,1.92],[50.70,2.25],[50.50,2.55],[50.28,2.85],[50.05,3.05],[49.85,3.25],[49.65,3.50],[49.45,3.75],[49.28,3.98],[49.05,4.20],[48.90,4.35],[48.65,4.30],[48.40,4.15]],
+    'A29':[[49.52,0.25],[49.55,0.60],[49.62,1.00],[49.70,1.40],[49.80,1.80],[49.88,2.20],[49.85,2.60],[49.85,3.00],[49.85,3.25]]
+  };
+  const PARIS = [48.8566, 2.3522];
+  const ENTER_KM = 3, EXIT_KM = 7;
 
-function playNext() {
-  const all = getAllStationsOrdered();
-  if (!all.length) return;
-  const idx = getCurrentIndex();
-  const next = all[(idx + 1) % all.length];
-  startPlay(next);
-}
+  let geoAuto = false;     // user setting
+  let geoWatch = null;     // watchPosition id
+  let onSanef = false;     // currently inside a corridor
+  let insideHits = 0, outsideHits = 0;
+  let returnTo = null;     // station id to restore on exit
+  let autoTuning = false;  // true while the app (not the user) changes station
+  let lastFix = null;
 
-function playPrev() {
-  const all = getAllStationsOrdered();
-  if (!all.length) return;
-  const idx = getCurrentIndex();
-  const prev = all[(idx - 1 + all.length) % all.length];
-  startPlay(prev);
-}
+  function haversineKm(lat1,lon1,lat2,lon2){
+    const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+    const a=Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return 2*R*Math.asin(Math.sqrt(a));
+  }
+  // distance (km) from point to segment a-b using a local flat projection
+  function segKm(plat,plon,a,b){
+    const k=Math.cos(plat*Math.PI/180);
+    const x=plon*k, y=plat;
+    const x1=a[1]*k, y1=a[0], x2=b[1]*k, y2=b[0];
+    const dx=x2-x1, dy=y2-y1;
+    let t=(dx||dy) ? ((x-x1)*dx+(y-y1)*dy)/(dx*dx+dy*dy) : 0;
+    t=Math.max(0,Math.min(1,t));
+    return Math.hypot(x-(x1+t*dx), y-(y1+t*dy))*111.32;
+  }
+  function nearestRoute(lat,lon){
+    let best={km:Infinity, route:null};
+    for(const [route,pts] of Object.entries(SANEF_ROUTES)){
+      for(let i=0;i<pts.length-1;i++){
+        const a=pts[i], b=pts[i+1];
+        if(Math.abs(a[0]-lat)>1.2 && Math.abs(b[0]-lat)>1.2) continue;  // cheap prefilter
+        if(Math.abs(a[1]-lon)>1.8 && Math.abs(b[1]-lon)>1.8) continue;
+        const km=segKm(lat,lon,a,b);
+        if(km<best.km) best={km,route};
+      }
+    }
+    return best;
+  }
+  function sanefStationIndex(lat,lon){
+    const idf = haversineKm(lat,lon,PARIS[0],PARIS[1]) < 55;
+    let i = stations.findIndex(s=>s.id===(idf?'sanef-idf':'sanef-reg'));
+    if(i<0) i = stations.findIndex(s=>/sanef/i.test(s.name||''));
+    return i;
+  }
 
-// Media Session API — lock screen, CarPlay controls, steering wheel buttons
-function updateMediaSession(title, artist, station) {
-  if (!('mediaSession' in navigator)) return;
-  navigator.mediaSession.metadata = new MediaMetadata({
-    title:  title  || station.label,
-    artist: artist || station.genre,
-    album:  'DAB Radio',
-    artwork: [
-      { src:'icon.png', sizes:'192x192', type:'image/png' },
-      { src:'icon.png', sizes:'512x512', type:'image/png' }
-    ]
-  });
-  navigator.mediaSession.setActionHandler('play',          () => { audio.play(); isPlaying=true; updatePlayBtn(); setStatus('Live'); startMetaPolling(currentStation); });
-  navigator.mediaSession.setActionHandler('pause',         () => { audio.pause(); isPlaying=false; updatePlayBtn(); setStatus('Paused'); stopMetaPolling(); });
-  navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
-  navigator.mediaSession.setActionHandler('nexttrack',     () => playNext());
-  navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-}
+  function geoTick(pos){
+    const lat=pos.coords.latitude, lon=pos.coords.longitude;
+    lastFix={lat,lon};
+    const n=nearestRoute(lat,lon);
+    if(!onSanef){
+      if(n.km<=ENTER_KM){ insideHits++; outsideHits=0; if(insideHits>=2) enterSanef(lat,lon,n.route); }
+      else insideHits=0;
+    }else{
+      if(n.km>=EXIT_KM){ outsideHits++; insideHits=0; if(outsideHits>=2) exitSanef(); }
+      else outsideHits=0;
+    }
+    renderGeoChip(n);
+  }
 
-const _origUpdate = updateTrackDisplay;
-function updateTrackDisplay(title, artist) {
-  _origUpdate(title, artist);
-  if (currentStation) updateMediaSession(title, artist, currentStation);
-}
+  function enterSanef(lat,lon,route){
+    onSanef=true;
+    const i=sanefStationIndex(lat,lon);
+    if(i<0 || i===current){ renderGeoChip({km:0,route}); return; }
+    returnTo = stations[current].id;
+    autoTuning=true; tune(i, wantPlaying); autoTuning=false;
+  }
+  function exitSanef(){
+    onSanef=false;
+    if(returnTo && /sanef/i.test(stations[current]?.name||'')){
+      const i=stations.findIndex(s=>s.id===returnTo);
+      if(i>=0){ autoTuning=true; tune(i, wantPlaying); autoTuning=false; }
+    }
+    returnTo=null;
+    renderGeoChip(null);
+  }
 
-loadStations();
+  function renderGeoChip(n){
+    const c=$('geoChip');
+    if(!geoAuto){ c.className=''; c.textContent=''; return; }
+    if(onSanef){ c.className='inside'; c.textContent='On Sanef network'+(n&&n.route?' · '+n.route:''); }
+    else if(!lastFix){ c.className='armed'; c.textContent='Sanef auto · waiting for GPS'; }
+    else { c.className='armed'; c.textContent='Sanef auto · armed'; }
+  }
+
+  function startGeo(){
+    if(!('geolocation' in navigator)){
+      banner('<b>No location support</b> on this browser — Sanef auto-switch is unavailable.');
+      geoAuto=false; renderGeoToggle(); return;
+    }
+    if(!window.isSecureContext){
+      banner('<b>Location needs HTTPS.</b> Host the app (or open via https) for Sanef auto-switch to work.');
+    }
+    geoWatch = navigator.geolocation.watchPosition(geoTick, err=>{
+      banner('<b>Location unavailable:</b> '+(err.code===1?'permission denied — allow it in browser settings.':'no GPS fix yet.'));
+    }, {enableHighAccuracy:false, maximumAge:30000, timeout:25000});
+    renderGeoChip(null);
+  }
+  function stopGeo(){
+    if(geoWatch!=null){ navigator.geolocation.clearWatch(geoWatch); geoWatch=null; }
+    onSanef=false; insideHits=outsideHits=0; returnTo=null; lastFix=null;
+    renderGeoChip(null);
+  }
+  function renderGeoToggle(){
+    const b=$('geoToggle');
+    b.textContent = geoAuto ? 'On' : 'Off';
+    b.style.background = geoAuto ? 'var(--accent)' : '';
+    b.style.color = geoAuto ? '#0b0c10' : '';
+  }
+  async function saveGeoSetting(){
+    try{ if(window.storage) await window.storage.set('drive-radio-geo', geoAuto?'1':'0'); }catch(e){}
+  }
+  async function loadGeoSetting(){
+    try{
+      if(!window.storage) return;
+      const r=await window.storage.get('drive-radio-geo');
+      geoAuto = !!(r && r.value==='1');
+    }catch(e){}
+  }
+  $('geoToggle').onclick = ()=>{
+    geoAuto=!geoAuto;
+    renderGeoToggle(); saveGeoSetting();
+    geoAuto ? startGeo() : stopGeo();
+  };
+
+  /* ---------------- boot ---------------- */
+  (async ()=>{
+    await loadSaved();
+    await loadGeoSetting();
+    renderPresets();
+    renderNow();
+    renderGeoToggle();
+    if(geoAuto) startGeo();
+    const ok = await probeNetwork();
+    if(ok){
+      const cid = stations.find(s=>s.rbSearch && !s.urls.length);
+      if(cid) resolveStation(cid);
+    }
+  })();
+})();
 </script>
 </body>
 </html>
