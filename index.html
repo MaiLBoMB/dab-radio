@@ -270,8 +270,13 @@
     },
     {
       id:'cidade', name:'Rádio Cidade', sub:'102.9 · Rio de Janeiro', color:'#9b30d9',
-      urls:[], // resolved live from the radio directory below
-      rbSearch:'Radio Cidade', rbCountry:'BR'
+      urls:[],
+      rbSearch:'Radio Cidade', rbCountry:'BR',
+      // The station broadcasts its own clean feed on jb.fm / mobradio infra.
+      // Prefer those; avoid third-party relay mirrors that inject their own ads.
+      preferHosts:['jb.fm','mobradio','radiocidade','mediastream','minhawebradio'],
+      avoidHosts:['raddio','streema','onlineradiobox','radio-addict','vox.rocks',
+                  'zeno.fm','radios.com.br','tunein','streamtheworld']
     }
   ];
 
@@ -334,6 +339,8 @@
           s.rbSearch = d.rbSearch; s.rbCountry = d.rbCountry; s.rbExact = d.rbExact;
           s.directoryFirst = d.directoryFirst;
           s.fallbackUrls = d.fallbackUrls ? [...d.fallbackUrls] : undefined;
+          s.preferHosts = d.preferHosts ? [...d.preferHosts] : undefined;
+          s.avoidHosts = d.avoidHosts ? [...d.avoidHosts] : undefined;
           // directory-first stations had dead hardcoded URLs saved previously — clear them
           if(d.directoryFirst) s.urls = [];
           else s.urls = [...d.urls];
@@ -358,13 +365,26 @@
     if(!res.ok) throw new Error('directory error');
     return res.json();
   }
+  // Order directory URLs best-first for a station: its own hosts first, known
+  // ad-injecting relay mirrors dropped (unless nothing else is left).
+  function rankUrls(urls, st){
+    const host = u => { try{ return new URL(u).hostname.toLowerCase(); }catch(e){ return ''; } };
+    const prefer = st.preferHosts || [], avoid = st.avoidHosts || [];
+    const kept = urls.filter(u => !avoid.some(a => host(u).includes(a)));
+    const pool = kept.length ? kept : urls; // never strand the station with zero URLs
+    return pool.slice().sort((a,b)=>{
+      const pa = prefer.some(p=>host(a).includes(p)) ? 0 : 1;
+      const pb = prefer.some(p=>host(b).includes(p)) ? 0 : 1;
+      return pa - pb;
+    });
+  }
   // Pull fresh, health-checked stream URLs for a station from the directory
   // and put them ahead of the shipped ones. Returns true if anything new came in.
   async function refreshUrls(st){
     if(!st.rbSearch) return false;
     try{
       const list = await rbSearch(st.rbSearch, st.rbCountry, st.rbExact);
-      const fresh = list.map(playableUrl).filter(Boolean);
+      const fresh = rankUrls(list.map(playableUrl).filter(Boolean), st);
       if(!fresh.length) return false;
       const merged = [...new Set([...fresh, ...st.urls])];
       const changed = !st.urls.length || merged[0] !== st.urls[0] || merged.length !== st.urls.length;
@@ -385,7 +405,7 @@
     setStatus('buffering','Finding stream…');
     try{
       const list = await rbSearch(st.rbSearch, st.rbCountry);
-      const urls = list.map(playableUrl).filter(Boolean);
+      const urls = rankUrls(list.map(playableUrl).filter(Boolean), st);
       if(urls.length){ st.urls = urls.slice(0,4); save(); }
       else setStatus('error','No stream found — use Search in settings');
     }catch(e){
