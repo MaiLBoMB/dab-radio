@@ -244,16 +244,18 @@
       ]
     },
     {
-      id:'planetrock', name:'Planet Rock', sub:'DAB · UK', color:'#e23b3b', dynamic:true,
+      id:'planetrock', name:'Planet Rock', sub:'DAB · UK', color:'#e23b3b',
       bauerCodes:['pln','prk','planetrock'],
+      rbSearch:'Planet Rock', rbCountry:'GB', rbExact:true,
       urls:[
         'https://stream-mz.planetradio.co.uk/planetrock.mp3',
         'https://stream-mz.planetradio.co.uk/planetrock.aac'
       ]
     },
     {
-      id:'abs90s', name:'Absolute 90s', sub:'DAB · UK', color:'#2bb3ff', dynamic:true,
+      id:'abs90s', name:'Absolute 90s', sub:'DAB · UK', color:'#2bb3ff',
       bauerCodes:['a9s','ab9','a90','absolute90s'],
+      rbSearch:'Absolute Radio 90s', rbCountry:'GB',
       urls:[
         'https://stream-mz.planetradio.co.uk/absolute90s.mp3',
         'https://stream-mz.planetradio.co.uk/absoluteradio90s.mp3',
@@ -261,8 +263,9 @@
       ]
     },
     {
-      id:'abscr', name:'Absolute Classic Rock', sub:'DAB · UK', color:'#ffd23b', dynamic:true,
+      id:'abscr', name:'Absolute Classic Rock', sub:'DAB · UK', color:'#ffd23b',
       bauerCodes:['acr','abcr','acl','absoluteclassicrock'],
+      rbSearch:'Absolute Classic Rock', rbCountry:'GB',
       urls:[
         'https://stream-mz.planetradio.co.uk/absoluteclassicrock.mp3',
         'https://stream-mz.planetradio.co.uk/absolutecr.mp3',
@@ -314,6 +317,14 @@
           DEFAULTS.forEach(d=>{
             if(!saved.some(s=>s.id===d.id)) saved.push({...d, urls:[...d.urls]});
           });
+          // refresh built-in stations with the latest shipped URLs and lookup info
+          saved.forEach(s=>{
+            const d = DEFAULTS.find(x=>x.id===s.id);
+            if(!d) return;
+            s.urls = [...d.urls];
+            s.bauerCodes = d.bauerCodes ? [...d.bauerCodes] : undefined;
+            s.rbSearch = d.rbSearch; s.rbCountry = d.rbCountry; s.rbExact = d.rbExact;
+          });
           stations = saved;
         }
       }
@@ -325,12 +336,28 @@
 
   /* ---------------- radio directory (radio-browser.info) ---------------- */
   const RB = 'https://all.api.radio-browser.info/json/stations/search';
-  async function rbSearch(name, country){
+  async function rbSearch(name, country, exact){
     const p = new URLSearchParams({name, limit:'12', hidebroken:'true', order:'clickcount', reverse:'true'});
     if(country) p.set('countrycode', country);
+    if(exact) p.set('nameExact', 'true');
     const res = await fetch(RB+'?'+p.toString());
     if(!res.ok) throw new Error('directory error');
     return res.json();
+  }
+  // Pull fresh, health-checked stream URLs for a station from the directory
+  // and put them ahead of the shipped ones. Returns true if anything new came in.
+  async function refreshUrls(st){
+    if(!st.rbSearch) return false;
+    try{
+      const list = await rbSearch(st.rbSearch, st.rbCountry, st.rbExact);
+      const fresh = list.map(playableUrl).filter(Boolean);
+      if(!fresh.length) return false;
+      const merged = [...new Set([...fresh, ...st.urls])];
+      const changed = merged[0] !== st.urls[0] || merged.length !== st.urls.length;
+      st.urls = merged.slice(0,6);
+      save();
+      return changed;
+    }catch(e){ return false; }
   }
   function playableUrl(item){
     const u = item.url_resolved || item.url || '';
@@ -357,7 +384,12 @@
   function streamUrl(st){
     let u = st.urls[urlIdx];
     if(!u) return null;
-    if(st.dynamic) u += (u.includes('?')?'&':'?') + 'aw_0_1st.skey=' + epoch();
+    // Bauer (Planet Rock / Absolute) streams require the parameters their own
+    // web player sends, including a fresh epoch key on every connection.
+    if(/planetradio\.co\.uk|sharp-stream\.com|absoluteradio\.co\.uk/.test(u)){
+      u += (u.includes('?')?'&':'?') +
+        'direct=true&aw_0_1st.playerid=BMUK_html5&aw_0_1st.bauer_loggedin=false&aw_0_1st.skey=' + epoch();
+    }
     return u;
   }
 
@@ -380,6 +412,7 @@
     if(typeof autoTuning !== 'undefined' && !autoTuning) returnTo = null; // a manual change wins over auto-return
     current = (i + stations.length) % stations.length;
     urlIdx = 0;
+    stations[current]._refreshed = false;
     setTrack('');
     renderNow();
     const st = stations[current];
@@ -422,6 +455,12 @@
     if(!wantPlaying) return;
     const st = stations[current];
     if(urlIdx < st.urls.length - 1){ urlIdx++; play(); return; }
+    // every known URL failed — fetch fresh ones from the directory once and retry
+    if(st.rbSearch && !st._refreshed){
+      st._refreshed = true;
+      setStatus('buffering','Refreshing stream sources…');
+      if(await refreshUrls(st)){ urlIdx = 0; play(); return; }
+    }
     if(netOk === null) await probeNetwork();
     if(netOk === false) setStatus('error','Network blocked — open in Safari/Chrome');
     else setStatus('error','Stream unavailable (offline or geo-blocked)');
