@@ -259,7 +259,14 @@
       id:'abscr', name:'Absolute Classic Rock', sub:'DAB · UK', color:'#ffd23b',
       bauerCodes:['acr','abcr','acl','absoluteclassicrock'],
       rbSearch:'Absolute Classic Rock', rbCountry:'GB', directoryFirst:true,
-      urls:[]
+      urls:[],
+      // Non-Bauer classic-rock streams used only if no Absolute relay is live.
+      // These are open stations, so the preset always plays the right genre.
+      fallbackUrls:[
+        'https://sc6.radiocaroline.net/proxy/caroline?mp=/stream',
+        'http://relay.181.fm:8062/',
+        'https://relay.181.fm:8062/'
+      ]
     },
     {
       id:'cidade', name:'Rádio Cidade', sub:'102.9 · Rio de Janeiro', color:'#9b30d9',
@@ -294,36 +301,51 @@
   }
   function banner(html){ const b=$('banner'); b.innerHTML=html; b.classList.add('show'); }
 
-  /* ---------------- persistence (optional, best-effort) ---------------- */
-  async function loadSaved(){
+  /* ---------------- persistence ----------------
+     Saves to the browser's localStorage, which persists across refreshes,
+     app restarts and reboots in any real browser. (window.storage, if present
+     in a preview sandbox, is used as a secondary mirror only.) */
+  const store = {
+    get(key){
+      try{ const v = localStorage.getItem(key); if(v!=null) return v; }catch(e){}
+      return null;
+    },
+    set(key,val){
+      try{ localStorage.setItem(key,val); }catch(e){}
+      try{ if(window.storage) window.storage.set(key,val); }catch(e){}
+    }
+  };
+
+  function loadSaved(){
     try{
-      if(!window.storage) return;
-      const r = await window.storage.get('drive-radio-stations');
-      if(r && r.value){
-        const saved = JSON.parse(r.value);
-        if(Array.isArray(saved) && saved.length){
-          // bring in any default stations added since the list was last saved
-          DEFAULTS.forEach(d=>{
-            if(!saved.some(s=>s.id===d.id)) saved.push({...d, urls:[...d.urls]});
-          });
-          // refresh built-in stations with the latest shipped URLs and lookup info
-          saved.forEach(s=>{
-            const d = DEFAULTS.find(x=>x.id===s.id);
-            if(!d) return;
-            s.bauerCodes = d.bauerCodes ? [...d.bauerCodes] : undefined;
-            s.rbSearch = d.rbSearch; s.rbCountry = d.rbCountry; s.rbExact = d.rbExact;
-            s.directoryFirst = d.directoryFirst;
-            // directory-first stations had dead hardcoded URLs saved previously — clear them
-            if(d.directoryFirst) s.urls = [];
-            else s.urls = [...d.urls];
-          });
-          stations = saved;
-        }
+      const raw = store.get('drive-radio-stations');
+      if(!raw) return;
+      const saved = JSON.parse(raw);
+      if(Array.isArray(saved) && saved.length){
+        // bring in any default stations added since the list was last saved
+        DEFAULTS.forEach(d=>{
+          if(!saved.some(s=>s.id===d.id)) saved.push({...d, urls:[...d.urls]});
+        });
+        // refresh built-in stations with the latest shipped URLs and lookup info
+        saved.forEach(s=>{
+          const d = DEFAULTS.find(x=>x.id===s.id);
+          if(!d) return;
+          s.bauerCodes = d.bauerCodes ? [...d.bauerCodes] : undefined;
+          s.rbSearch = d.rbSearch; s.rbCountry = d.rbCountry; s.rbExact = d.rbExact;
+          s.directoryFirst = d.directoryFirst;
+          s.fallbackUrls = d.fallbackUrls ? [...d.fallbackUrls] : undefined;
+          // directory-first stations had dead hardcoded URLs saved previously — clear them
+          if(d.directoryFirst) s.urls = [];
+          else s.urls = [...d.urls];
+        });
+        stations = saved;
       }
-    }catch(e){ /* first run or no storage — keep defaults */ }
+    }catch(e){ /* first run or unreadable — keep defaults */ }
   }
-  async function save(){
-    try{ if(window.storage) await window.storage.set('drive-radio-stations', JSON.stringify(stations)); }catch(e){}
+  function save(){
+    // strip transient runtime flags so they don't get frozen into storage
+    const clean = stations.map(s=>{ const c={...s}; delete c._refreshed; return c; });
+    store.set('drive-radio-stations', JSON.stringify(clean));
   }
 
   /* ---------------- radio directory (radio-browser.info) ---------------- */
@@ -404,6 +426,7 @@
     if(typeof autoTuning !== 'undefined' && !autoTuning) returnTo = null; // a manual change wins over auto-return
     current = (i + stations.length) % stations.length;
     urlIdx = 0;
+    if(typeof autoTuning === 'undefined' || !autoTuning) store.set('drive-radio-last', stations[current].id);
     stations[current]._refreshed = false;
     setTrack('');
     renderNow();
@@ -413,6 +436,12 @@
     if((st.directoryFirst || !st.urls.length) && st.rbSearch){
       setStatus('buffering','Finding a working stream…');
       await refreshUrls(st);
+    }
+    // append genre fallbacks (e.g. for stations the broadcaster blocks) once,
+    // so playback drops to them automatically if the real relays don't answer
+    if(st.fallbackUrls && st.fallbackUrls.length){
+      const playable = st.fallbackUrls.filter(u=>playableUrl({url:u}));
+      st.urls = [...new Set([...st.urls, ...playable])];
     }
     if(autoplay) play(); else setStatus('', 'Tap play to start');
   }
@@ -781,15 +810,11 @@
     b.style.background = geoAuto ? 'var(--accent)' : '';
     b.style.color = geoAuto ? '#0b0c10' : '';
   }
-  async function saveGeoSetting(){
-    try{ if(window.storage) await window.storage.set('drive-radio-geo', geoAuto?'1':'0'); }catch(e){}
+  function saveGeoSetting(){
+    store.set('drive-radio-geo', geoAuto?'1':'0');
   }
-  async function loadGeoSetting(){
-    try{
-      if(!window.storage) return;
-      const r=await window.storage.get('drive-radio-geo');
-      geoAuto = !!(r && r.value==='1');
-    }catch(e){}
+  function loadGeoSetting(){
+    geoAuto = store.get('drive-radio-geo') === '1';
   }
   $('geoToggle').onclick = ()=>{
     geoAuto=!geoAuto;
@@ -799,8 +824,14 @@
 
   /* ---------------- boot ---------------- */
   (async ()=>{
-    await loadSaved();
-    await loadGeoSetting();
+    loadSaved();
+    loadGeoSetting();
+    // restore the preset that was selected last time (without auto-playing)
+    const lastId = store.get('drive-radio-last');
+    if(lastId){
+      const idx = stations.findIndex(s=>s.id===lastId);
+      if(idx>=0) current = idx;
+    }
     renderPresets();
     renderNow();
     renderGeoToggle();
