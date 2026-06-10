@@ -246,31 +246,20 @@
     {
       id:'planetrock', name:'Planet Rock', sub:'DAB · UK', color:'#e23b3b',
       bauerCodes:['pln','prk','planetrock'],
-      rbSearch:'Planet Rock', rbCountry:'GB', rbExact:true,
-      urls:[
-        'https://stream-mz.planetradio.co.uk/planetrock.mp3',
-        'https://stream-mz.planetradio.co.uk/planetrock.aac'
-      ]
+      rbSearch:'Planet Rock', rbCountry:'GB', rbExact:true, directoryFirst:true,
+      urls:[]
     },
     {
       id:'abs90s', name:'Absolute 90s', sub:'DAB · UK', color:'#2bb3ff',
       bauerCodes:['a9s','ab9','a90','absolute90s'],
-      rbSearch:'Absolute Radio 90s', rbCountry:'GB',
-      urls:[
-        'https://stream-mz.planetradio.co.uk/absolute90s.mp3',
-        'https://stream-mz.planetradio.co.uk/absoluteradio90s.mp3',
-        'https://stream-mz.planetradio.co.uk/absolute90s.aac'
-      ]
+      rbSearch:'Absolute Radio 90s', rbCountry:'GB', directoryFirst:true,
+      urls:[]
     },
     {
       id:'abscr', name:'Absolute Classic Rock', sub:'DAB · UK', color:'#ffd23b',
       bauerCodes:['acr','abcr','acl','absoluteclassicrock'],
-      rbSearch:'Absolute Classic Rock', rbCountry:'GB',
-      urls:[
-        'https://stream-mz.planetradio.co.uk/absoluteclassicrock.mp3',
-        'https://stream-mz.planetradio.co.uk/absolutecr.mp3',
-        'https://stream-mz.planetradio.co.uk/absoluteclassicrock.aac'
-      ]
+      rbSearch:'Absolute Classic Rock', rbCountry:'GB', directoryFirst:true,
+      urls:[]
     },
     {
       id:'cidade', name:'Rádio Cidade', sub:'102.9 · Rio de Janeiro', color:'#9b30d9',
@@ -321,9 +310,12 @@
           saved.forEach(s=>{
             const d = DEFAULTS.find(x=>x.id===s.id);
             if(!d) return;
-            s.urls = [...d.urls];
             s.bauerCodes = d.bauerCodes ? [...d.bauerCodes] : undefined;
             s.rbSearch = d.rbSearch; s.rbCountry = d.rbCountry; s.rbExact = d.rbExact;
+            s.directoryFirst = d.directoryFirst;
+            // directory-first stations had dead hardcoded URLs saved previously — clear them
+            if(d.directoryFirst) s.urls = [];
+            else s.urls = [...d.urls];
           });
           stations = saved;
         }
@@ -353,7 +345,7 @@
       const fresh = list.map(playableUrl).filter(Boolean);
       if(!fresh.length) return false;
       const merged = [...new Set([...fresh, ...st.urls])];
-      const changed = merged[0] !== st.urls[0] || merged.length !== st.urls.length;
+      const changed = !st.urls.length || merged[0] !== st.urls[0] || merged.length !== st.urls.length;
       st.urls = merged.slice(0,6);
       save();
       return changed;
@@ -416,7 +408,12 @@
     setTrack('');
     renderNow();
     const st = stations[current];
-    if(!st.urls.length && st.rbSearch) await resolveStation(st);
+    // Stations Bauer blocks for direct access: get a working relay from the
+    // directory before the first play, not after a failure.
+    if((st.directoryFirst || !st.urls.length) && st.rbSearch){
+      setStatus('buffering','Finding a working stream…');
+      await refreshUrls(st);
+    }
     if(autoplay) play(); else setStatus('', 'Tap play to start');
   }
 
@@ -462,8 +459,12 @@
       if(await refreshUrls(st)){ urlIdx = 0; play(); return; }
     }
     if(netOk === null) await probeNetwork();
-    if(netOk === false) setStatus('error','Network blocked — open in Safari/Chrome');
-    else setStatus('error','Stream unavailable (offline or geo-blocked)');
+    if(netOk === false){ setStatus('error','Network blocked — open in Safari/Chrome'); return; }
+    if(st.bauerCodes){
+      setStatus('error','Blocked by broadcaster — no relay available right now');
+    }else{
+      setStatus('error','Stream unavailable — try Search in settings');
+    }
   });
 
   /* ---------------- now playing track metadata ----------------
