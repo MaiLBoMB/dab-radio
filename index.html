@@ -250,6 +250,16 @@
       urls:[]
     },
     {
+      id:'absolute', name:'Absolute Radio', sub:'DAB · UK', color:'#34d069',
+      bauerCodes:['abr','absoluteradio','abs'],
+      rbSearch:'Absolute Radio', rbCountry:'GB', rbExact:true, directoryFirst:true,
+      urls:[]
+    },
+    {
+      id:'capital', name:'Capital FM', sub:'FM · UK', color:'#ff5fa2',
+      urls:['https://media-ice.musicradio.com/CapitalMP3']
+    },
+    {
       id:'abs90s', name:'Absolute 90s', sub:'DAB · UK', color:'#2bb3ff',
       bauerCodes:['a9s','ab9','a90','absolute90s'],
       rbSearch:'Absolute Radio 90s', rbCountry:'GB', directoryFirst:true,
@@ -272,6 +282,9 @@
       id:'cidade', name:'Rádio Cidade', sub:'102.9 · Rio de Janeiro', color:'#9b30d9',
       urls:[],
       rbSearch:'Radio Cidade', rbCountry:'BR',
+      // 'Rádio Cidade' is a name dozens of unrelated Brazilian stations share —
+      // require the Rio de Janeiro one specifically.
+      rbState:'Rio de Janeiro', rbNameHint:/rio|102/i, resolverV:2,
       // The station broadcasts its own clean feed on jb.fm / mobradio infra.
       // Prefer those; avoid third-party relay mirrors that inject their own ads.
       preferHosts:['jb.fm','mobradio','radiocidade','mediastream','minhawebradio'],
@@ -294,10 +307,13 @@
      viewer), ALL outside connections are blocked by its security policy and
      no stream can ever play. Detect it and tell the user clearly. */
   async function probeNetwork(){
-    try{
-      const r = await fetch('https://all.api.radio-browser.info/json/config', {cache:'no-store'});
-      netOk = r.ok;
-    }catch(e){ netOk = false; }
+    netOk = false;
+    for(const base of ['https://all.api.radio-browser.info','https://de2.api.radio-browser.info','https://fi1.api.radio-browser.info']){
+      try{
+        const r = await fetch(base + '/json/config', {cache:'no-store', signal: AbortSignal.timeout(4000)});
+        if(r.ok){ netOk = true; break; }
+      }catch(e){}
+    }
     if(netOk === false){
       banner('<b>Streams are blocked in this window.</b> This preview sandbox does not allow internet audio. ' +
         'Save this file and open it directly in <b>Safari or Chrome</b> (or host it on any web server) — everything will work there.');
@@ -341,9 +357,16 @@
           s.fallbackUrls = d.fallbackUrls ? [...d.fallbackUrls] : undefined;
           s.preferHosts = d.preferHosts ? [...d.preferHosts] : undefined;
           s.avoidHosts = d.avoidHosts ? [...d.avoidHosts] : undefined;
-          // directory-first stations had dead hardcoded URLs saved previously — clear them
-          if(d.directoryFirst) s.urls = [];
-          else s.urls = [...d.urls];
+          s.rbState = d.rbState; s.rbNameHint = d.rbNameHint;
+          // resolver rules changed since this was cached → old URLs may point
+          // at the wrong station entirely; purge and re-resolve
+          if(d.resolverV && s.resolverV !== d.resolverV){
+            s.urls = []; s.urlsTs = 0; s.resolverV = d.resolverV;
+          }
+          // keep previously resolved URLs for instant startup; only seed from
+          // defaults for stations that never use the directory
+          if(!d.directoryFirst && !d.rbSearch) s.urls = [...d.urls];
+          else if(!Array.isArray(s.urls)) s.urls = [];
         });
         stations = saved;
       }
@@ -355,15 +378,41 @@
     store.set('drive-radio-stations', JSON.stringify(clean));
   }
 
-  /* ---------------- radio directory (radio-browser.info) ---------------- */
-  const RB = 'https://all.api.radio-browser.info/json/stations/search';
+  /* ---------------- radio directory (radio-browser.info) ----------------
+     Mirrors go down individually all the time — rotate with a short timeout
+     so one dead server costs 4 seconds, not the whole feature. */
+  const RB_MIRRORS = [
+    'https://all.api.radio-browser.info',
+    'https://de2.api.radio-browser.info',
+    'https://fi1.api.radio-browser.info',
+    'https://nl1.api.radio-browser.info'
+  ];
   async function rbSearch(name, country, exact){
     const p = new URLSearchParams({name, limit:'12', hidebroken:'true', order:'clickcount', reverse:'true'});
     if(country) p.set('countrycode', country);
     if(exact) p.set('nameExact', 'true');
-    const res = await fetch(RB+'?'+p.toString());
-    if(!res.ok) throw new Error('directory error');
-    return res.json();
+    for(const base of RB_MIRRORS){
+      try{
+        const res = await fetch(base + '/json/stations/search?' + p.toString(), {signal: AbortSignal.timeout(4000)});
+        if(res.ok) return await res.json();
+      }catch(e){}
+    }
+    throw new Error('directory unreachable');
+  }
+  // Narrow directory results to the intended station when many share a name:
+  // hard-require the state if any entry matches it, then prefer name hints.
+  function filterStations(list, st){
+    let out = list || [];
+    if(st.rbState){
+      const want = st.rbState.toLowerCase();
+      const inState = out.filter(x => (x.state||'').toLowerCase().includes(want));
+      if(inState.length) out = inState;
+    }
+    if(st.rbNameHint){
+      const hinted = out.filter(x => st.rbNameHint.test((x.name||'') + ' ' + (x.tags||'')));
+      if(hinted.length) out = hinted;
+    }
+    return out;
   }
   // Order directory URLs best-first for a station: its own hosts first, known
   // ad-injecting relay mirrors dropped (unless nothing else is left).
@@ -384,11 +433,12 @@
     if(!st.rbSearch) return false;
     try{
       const list = await rbSearch(st.rbSearch, st.rbCountry, st.rbExact);
-      const fresh = rankUrls(list.map(playableUrl).filter(Boolean), st);
+      const fresh = rankUrls(filterStations(list, st).map(playableUrl).filter(Boolean), st);
       if(!fresh.length) return false;
       const merged = [...new Set([...fresh, ...st.urls])];
       const changed = !st.urls.length || merged[0] !== st.urls[0] || merged.length !== st.urls.length;
       st.urls = merged.slice(0,6);
+      st.urlsTs = Date.now();
       save();
       return changed;
     }catch(e){ return false; }
@@ -405,7 +455,7 @@
     setStatus('buffering','Finding stream…');
     try{
       const list = await rbSearch(st.rbSearch, st.rbCountry);
-      const urls = rankUrls(list.map(playableUrl).filter(Boolean), st);
+      const urls = rankUrls(filterStations(list, st).map(playableUrl).filter(Boolean), st);
       if(urls.length){ st.urls = urls.slice(0,4); save(); }
       else setStatus('error','No stream found — use Search in settings');
     }catch(e){
@@ -453,7 +503,7 @@
     const st = stations[current];
     // Stations Bauer blocks for direct access: get a working relay from the
     // directory before the first play, not after a failure.
-    if((st.directoryFirst || !st.urls.length) && st.rbSearch){
+    if(!st.urls.length && st.rbSearch){
       setStatus('buffering','Finding a working stream…');
       await refreshUrls(st);
     }
@@ -858,8 +908,12 @@
     if(geoAuto) startGeo();
     const ok = await probeNetwork();
     if(ok){
-      const cid = stations.find(s=>s.rbSearch && !s.urls.length);
-      if(cid) resolveStation(cid);
+      // Background-refresh directory stations that are missing or stale —
+      // never blocks the UI, so launch and first play stay instant.
+      const STALE = 7*24*60*60*1000;
+      stations
+        .filter(s => s.rbSearch && (!s.urls.length || !s.urlsTs || Date.now() - s.urlsTs > STALE))
+        .forEach(s => refreshUrls(s));
     }
   })();
 })();
