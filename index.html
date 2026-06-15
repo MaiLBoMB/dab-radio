@@ -29,13 +29,6 @@
     padding-top:var(--safe-top);
   }
 
-  #banner{
-    display:none;background:#3b2a00;color:#ffd27a;font-size:14px;line-height:1.45;
-    padding:12px 16px;border-bottom:1px solid #5b4200;user-select:text;
-  }
-  #banner.show{display:block}
-  #banner b{color:#ffe7b0}
-
   /* ---------- Now playing ---------- */
   #nowPlaying{
     flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -163,8 +156,6 @@
 </style>
 </head>
 <body>
-
-<div id="banner"></div>
 
 <div id="topbar"><button id="gear" aria-label="Settings">&#9881;</button></div>
 
@@ -302,30 +293,8 @@
   let current = 0;
   let urlIdx = 0;
   let wantPlaying = false;
-  let netOk = null; // null = unknown, true/false after probe
-
   const $ = id => document.getElementById(id);
   const player = $('player');
-
-  /* ---------------- environment probe ----------------
-     If we are running inside a sandboxed preview (e.g. a chat app's file
-     viewer), ALL outside connections are blocked by its security policy and
-     no stream can ever play. Detect it and tell the user clearly. */
-  async function probeNetwork(){
-    netOk = false;
-    for(const base of ['https://all.api.radio-browser.info','https://de2.api.radio-browser.info','https://fi1.api.radio-browser.info']){
-      try{
-        const r = await fetch(base + '/json/config', {cache:'no-store', signal: AbortSignal.timeout(4000)});
-        if(r.ok){ netOk = true; break; }
-      }catch(e){}
-    }
-    if(netOk === false){
-      banner('<b>Streams are blocked in this window.</b> This preview sandbox does not allow internet audio. ' +
-        'Save this file and open it directly in <b>Safari or Chrome</b> (or host it on any web server) — everything will work there.');
-    }
-    return netOk;
-  }
-  function banner(html){ const b=$('banner'); b.innerHTML=html; b.classList.add('show'); }
 
   /* ---------------- persistence ----------------
      Saves to the browser's localStorage, which persists across refreshes,
@@ -464,8 +433,7 @@
       if(urls.length){ st.urls = urls.slice(0,4); save(); }
       else setStatus('error','No stream found — use Search in settings');
     }catch(e){
-      if(netOk === false) setStatus('error','Network blocked in this window');
-      else setStatus('error','Directory unreachable — check connection');
+      setStatus('error','Directory unreachable — check connection');
     }
   }
 
@@ -562,8 +530,6 @@
       setStatus('buffering','Refreshing stream sources…');
       if(await refreshUrls(st)){ urlIdx = 0; play(); return; }
     }
-    if(netOk === null) await probeNetwork();
-    if(netOk === false){ setStatus('error','Network blocked — open in Safari/Chrome'); return; }
     if(st.bauerCodes){
       setStatus('error','Blocked by broadcaster — no relay available right now');
     }else{
@@ -740,9 +706,7 @@
         box.appendChild(row);
       });
     }catch(e){
-      box.innerHTML = '<div class="result"><div class="meta"><div class="rname">' +
-        (netOk===false ? 'Network blocked in this window' : 'Directory unreachable') +
-        '</div></div></div>';
+      box.innerHTML = '<div class="result"><div class="meta"><div class="rname">Directory unreachable — check connection</div></div></div>';
     }
   }
 
@@ -863,14 +827,11 @@
 
   function startGeo(){
     if(!('geolocation' in navigator)){
-      banner('<b>No location support</b> on this browser — Sanef auto-switch is unavailable.');
+      setStatus('Location not supported — Sanef auto unavailable');
       geoAuto=false; renderGeoToggle(); return;
     }
-    if(!window.isSecureContext){
-      banner('<b>Location needs HTTPS.</b> Host the app (or open via https) for Sanef auto-switch to work.');
-    }
     geoWatch = navigator.geolocation.watchPosition(geoTick, err=>{
-      banner('<b>Location unavailable:</b> '+(err.code===1?'permission denied — allow it in browser settings.':'no GPS fix yet.'));
+      setStatus(err.code===1 ? 'Location permission denied' : 'Waiting for GPS fix…');
     }, {enableHighAccuracy:false, maximumAge:30000, timeout:25000});
     renderGeoChip(null);
   }
@@ -944,14 +905,11 @@
     renderGeoToggle();
     if(geoAuto) startGeo();
 
-    const ok = await probeNetwork();
-    if(ok){
-      // Background-refresh stale/missing directory stations without blocking
-      const STALE = 7*24*60*60*1000;
-      stations
-        .filter(s => s.rbSearch && (!s.urls.length || !s.urlsTs || Date.now() - s.urlsTs > STALE))
-        .forEach(s => refreshUrls(s));
-    }
+    // Background-refresh stale/missing directory stations without blocking
+    const STALE = 7*24*60*60*1000;
+    stations
+      .filter(s => s.rbSearch && (!s.urls.length || !s.urlsTs || Date.now() - s.urlsTs > STALE))
+      .forEach(s => refreshUrls(s));
 
     // Auto-play Rádio Cidade (or whatever was last playing) on launch.
     // iOS requires a user gesture before the first play; the .catch() silently
