@@ -256,8 +256,12 @@
       urls:[]
     },
     {
+      // Capital FM: Global blocks third-party CORS the same way Bauer does,
+      // so the hardcoded URL stalls on buffering. Use directory-first too.
       id:'capital', name:'Capital FM', sub:'FM · UK', color:'#ff5fa2',
-      urls:['https://media-ice.musicradio.com/CapitalMP3']
+      rbSearch:'Capital FM', rbCountry:'GB', rbExact:true, directoryFirst:true,
+      fallbackUrls:['https://media-ice.musicradio.com/CapitalMP3'],
+      urls:[]
     },
     {
       id:'abs90s', name:'Absolute 90s', sub:'DAB · UK', color:'#2bb3ff',
@@ -270,11 +274,8 @@
       bauerCodes:['acr','abcr','acl','absoluteclassicrock'],
       rbSearch:'Absolute Classic Rock', rbCountry:'GB', directoryFirst:true,
       urls:[],
-      // Non-Bauer classic-rock streams used only if no Absolute relay is live.
-      // These are open stations, so the preset always plays the right genre.
       fallbackUrls:[
         'https://sc6.radiocaroline.net/proxy/caroline?mp=/stream',
-        'http://relay.181.fm:8062/',
         'https://relay.181.fm:8062/'
       ]
     },
@@ -892,29 +893,66 @@
     geoAuto ? startGeo() : stopGeo();
   };
 
+  /* ---------------- phone-call auto-resume ----------------
+     The Audio Focus API isn't available in browsers, but we can listen to the
+     page's visibility and the audio element's own interruption events to
+     detect when a call ends and restart playback automatically. */
+  let wasPlayingBeforeInterrupt = false;
+
+  // 'pause' fires both for user taps and for system interruptions (calls,
+  // Siri, GPS prompts). We distinguish them by whether *we* triggered it.
+  player.addEventListener('pause', ()=>{
+    if(wantPlaying){
+      // paused externally while we still want audio → record it
+      wasPlayingBeforeInterrupt = true;
+    }
+  });
+
+  // When the call ends the browser resumes the audio context. On iOS the audio
+  // element stays paused but 'ended' / 'stalled' don't fire — the most
+  // reliable hook is the page becoming visible again (user swipes back).
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible' && wasPlayingBeforeInterrupt && wantPlaying){
+      wasPlayingBeforeInterrupt = false;
+      player.play().catch(()=>{});
+    }
+  });
+
+  // Android raises 'play' automatically on audio-focus regain; on iOS we also
+  // get a second chance via the 'playing' event resetting the flag.
+  player.addEventListener('playing', ()=>{ wasPlayingBeforeInterrupt = false; });
+
   /* ---------------- boot ---------------- */
   (async ()=>{
     loadSaved();
     loadGeoSetting();
-    // restore the preset that was selected last time (without auto-playing)
+
+    // Default to Rádio Cidade; restore user's last choice if they changed it
+    const defaultId = 'cidade';
     const lastId = store.get('drive-radio-last');
-    if(lastId){
-      const idx = stations.findIndex(s=>s.id===lastId);
-      if(idx>=0) current = idx;
-    }
+    const targetId = lastId || defaultId;
+    const idx = stations.findIndex(s => s.id === targetId);
+    current = idx >= 0 ? idx : stations.findIndex(s => s.id === defaultId);
+    if(current < 0) current = 0;
+
     renderPresets();
     renderNow();
     renderGeoToggle();
     if(geoAuto) startGeo();
+
     const ok = await probeNetwork();
     if(ok){
-      // Background-refresh directory stations that are missing or stale —
-      // never blocks the UI, so launch and first play stay instant.
+      // Background-refresh stale/missing directory stations without blocking
       const STALE = 7*24*60*60*1000;
       stations
         .filter(s => s.rbSearch && (!s.urls.length || !s.urlsTs || Date.now() - s.urlsTs > STALE))
         .forEach(s => refreshUrls(s));
     }
+
+    // Auto-play Rádio Cidade (or whatever was last playing) on launch.
+    // iOS requires a user gesture before the first play; the .catch() silently
+    // handles that case — the user just taps play once and it works from then on.
+    tune(current, true);
   })();
 })();
 </script>
