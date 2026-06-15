@@ -219,66 +219,8 @@
 (() => {
   const epoch = () => Math.floor(Date.now()/1000);
 
-  // Default presets — hardcoded URLs have been manually verified as open streams.
-  // Bauer stations (Planet Rock / Absolute) are permanently blocked to third parties
-  // and have been replaced with equivalent open stations in the same genre.
   const DEFAULTS = [
     {
-      // Sanef: their own Infomaniak server — always open, no CORS issues
-      id:'sanef-idf', name:'Sanef 107.7', sub:'107.7 FM · Île-de-France', color:'#ff8a00',
-      urls:['https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3']
-    },
-    {
-      id:'sanef-reg', name:'Sanef 107.7 Régions', sub:'107.7 FM · Nord / Est / Ouest', color:'#ffb340',
-      urls:[
-        'https://sanef.ice.infomaniak.ch/sanef1077-regions.mp3',
-        'https://sanef.ice.infomaniak.ch/sanef1077-nord.mp3'
-      ]
-    },
-    {
-      // Classic Rock 24/7 — open Icecast stream, same genre as Planet Rock
-      id:'classicrock', name:'Classic Rock', sub:'Absolute Radio Network · UK', color:'#e23b3b',
-      urls:[
-        'https://icecast.walmradio.com/classicrock',
-        'https://stream.rcs.revma.com/ahn9aynvv48uv'
-      ],
-      rbSearch:'Classic Rock Radio', rbCountry:'GB'
-    },
-    {
-      // Radio Caroline — the legendary rock station, permanently open stream
-      id:'caroline', name:'Radio Caroline', sub:'Classic Rock · UK', color:'#ff8a00',
-      urls:[
-        'https://sc6.radiocaroline.net:8040/;',
-        'https://playerservices.streamtheworld.com/api/livestream-redirect/RADIOCAROLINE.mp3'
-      ],
-      rbSearch:'Radio Caroline', rbCountry:'GB'
-    },
-    {
-      // Magic Radio — open Global stream, confirmed working via media-ice
-      id:'magic', name:'Magic Radio', sub:'Soft Hits · UK', color:'#ff5fa2',
-      urls:[
-        'https://media-ice.musicradio.com/MagicMP3',
-        'https://media-ice.musicradio.com/Magic'
-      ]
-    },
-    {
-      // Absolute 90s: open stream via media-ice (not a Bauer direct stream)
-      id:'abs90s', name:'Absolute 90s', sub:'DAB · UK', color:'#2bb3ff',
-      urls:[
-        'https://media-ice.musicradio.com/AbsoluteRadio90sMP3',
-        'https://media-ice.musicradio.com/AbsoluteRadio90s'
-      ]
-    },
-    {
-      // Classic FM: confirmed open Global stream, widely used by third-party apps
-      id:'classicfm', name:'Classic FM', sub:'Classical · UK', color:'#ffd23b',
-      urls:[
-        'https://media-ice.musicradio.com/ClassicFMMP3',
-        'https://media-ice.musicradio.com/ClassicFM'
-      ]
-    },
-    {
-      // Rádio Cidade: directory-resolved, pinned to Rio de Janeiro state
       id:'cidade', name:'Rádio Cidade', sub:'102.9 · Rio de Janeiro', color:'#9b30d9',
       urls:[],
       rbSearch:'Radio Cidade', rbCountry:'BR',
@@ -286,6 +228,40 @@
       preferHosts:['jb.fm','mobradio','radiocidade','mediastream','minhawebradio'],
       avoidHosts:['raddio','streema','onlineradiobox','radio-addict','vox.rocks',
                   'zeno.fm','radios.com.br','tunein','streamtheworld']
+    },
+    {
+      id:'planet', name:'Planet Rock', sub:'Classic Rock · UK', color:'#e23b3b',
+      urls:[], rbSearch:'Planet Rock', rbCountry:'GB', directoryFirst:true,
+      bauerCodes:['pln','prk','planetrock']
+    },
+    {
+      id:'absrock', name:'Absolute Radio', sub:'Rock · UK', color:'#34d069',
+      urls:[], rbSearch:'Absolute Radio', rbCountry:'GB', directoryFirst:true,
+      bauerCodes:['abr','absoluteradio','abs']
+    },
+    {
+      id:'abs90s', name:'Absolute 90s', sub:'90s Rock · UK', color:'#2bb3ff',
+      urls:['https://media-ice.musicradio.com/AbsoluteRadio90sMP3'],
+      bauerCodes:['a9s','absolute90s']
+    },
+    {
+      id:'talksport', name:'talkSPORT', sub:'Sport · UK', color:'#ff8a00',
+      urls:[], rbSearch:'talkSPORT', rbCountry:'GB'
+    },
+    {
+      id:'capital', name:'Capital FM', sub:'Pop · UK', color:'#ff5fa2',
+      urls:[], rbSearch:'Capital FM', rbCountry:'GB', directoryFirst:true
+    },
+    {
+      id:'sanef-idf', name:'Sanef 107.7', sub:'107.7 FM · Île-de-France', color:'#ffb340',
+      urls:['https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3']
+    },
+    {
+      id:'sanef-reg', name:'Sanef 107.7 Régions', sub:'107.7 FM · Nord / Est / Ouest', color:'#ff8a00',
+      urls:[
+        'https://sanef.ice.infomaniak.ch/sanef1077-regions.mp3',
+        'https://sanef.ice.infomaniak.ch/sanef1077-nord.mp3'
+      ]
     }
   ];
 
