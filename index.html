@@ -29,13 +29,6 @@
     padding-top:var(--safe-top);
   }
 
-  #banner{
-    display:none;background:#3b2a00;color:#ffd27a;font-size:14px;line-height:1.45;
-    padding:12px 16px;border-bottom:1px solid #5b4200;user-select:text;
-  }
-  #banner.show{display:block}
-  #banner b{color:#ffe7b0}
-
   /* ---------- Now playing ---------- */
   #nowPlaying{
     flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -164,8 +157,6 @@
 </head>
 <body>
 
-<div id="banner"></div>
-
 <div id="topbar"><button id="gear" aria-label="Settings">&#9881;</button></div>
 
 <div id="nowPlaying">
@@ -228,68 +219,49 @@
 (() => {
   const epoch = () => Math.floor(Date.now()/1000);
 
-  // Default presets. urls = ordered fallbacks tried automatically.
-  // dynamic:true URLs get a fresh epoch key appended (required by Bauer/Planet Rock).
-  // bauerCodes: station codes for Bauer's now-playing API.
   const DEFAULTS = [
-    {
-      id:'sanef-idf', name:'Sanef 107.7', sub:'107.7 FM · Île-de-France', color:'#ff8a00',
-      urls:['https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3']
-    },
-    {
-      id:'sanef-reg', name:'Sanef 107.7 Régions', sub:'107.7 FM · Nord / Est / Ouest', color:'#ffb340',
-      urls:[
-        'https://sanef.ice.infomaniak.ch/sanef1077-regions.mp3',
-        'https://sanef.ice.infomaniak.ch/sanef1077-nord.mp3'
-      ]
-    },
-    {
-      id:'planetrock', name:'Planet Rock', sub:'DAB · UK', color:'#e23b3b',
-      bauerCodes:['pln','prk','planetrock'],
-      rbSearch:'Planet Rock', rbCountry:'GB', rbExact:true, directoryFirst:true,
-      urls:[]
-    },
-    {
-      id:'absolute', name:'Absolute Radio', sub:'DAB · UK', color:'#34d069',
-      bauerCodes:['abr','absoluteradio','abs'],
-      rbSearch:'Absolute Radio', rbCountry:'GB', rbExact:true, directoryFirst:true,
-      urls:[]
-    },
-    {
-      id:'capital', name:'Capital FM', sub:'FM · UK', color:'#ff5fa2',
-      urls:['https://media-ice.musicradio.com/CapitalMP3']
-    },
-    {
-      id:'abs90s', name:'Absolute 90s', sub:'DAB · UK', color:'#2bb3ff',
-      bauerCodes:['a9s','ab9','a90','absolute90s'],
-      rbSearch:'Absolute Radio 90s', rbCountry:'GB', directoryFirst:true,
-      urls:[]
-    },
-    {
-      id:'abscr', name:'Absolute Classic Rock', sub:'DAB · UK', color:'#ffd23b',
-      bauerCodes:['acr','abcr','acl','absoluteclassicrock'],
-      rbSearch:'Absolute Classic Rock', rbCountry:'GB', directoryFirst:true,
-      urls:[],
-      // Non-Bauer classic-rock streams used only if no Absolute relay is live.
-      // These are open stations, so the preset always plays the right genre.
-      fallbackUrls:[
-        'https://sc6.radiocaroline.net/proxy/caroline?mp=/stream',
-        'http://relay.181.fm:8062/',
-        'https://relay.181.fm:8062/'
-      ]
-    },
     {
       id:'cidade', name:'Rádio Cidade', sub:'102.9 · Rio de Janeiro', color:'#9b30d9',
       urls:[],
       rbSearch:'Radio Cidade', rbCountry:'BR',
-      // 'Rádio Cidade' is a name dozens of unrelated Brazilian stations share —
-      // require the Rio de Janeiro one specifically.
       rbState:'Rio de Janeiro', rbNameHint:/rio|102/i, resolverV:2,
-      // The station broadcasts its own clean feed on jb.fm / mobradio infra.
-      // Prefer those; avoid third-party relay mirrors that inject their own ads.
       preferHosts:['jb.fm','mobradio','radiocidade','mediastream','minhawebradio'],
       avoidHosts:['raddio','streema','onlineradiobox','radio-addict','vox.rocks',
                   'zeno.fm','radios.com.br','tunein','streamtheworld']
+    },
+    {
+      id:'planet', name:'Planet Rock', sub:'Classic Rock · UK', color:'#e23b3b',
+      urls:[], rbSearch:'Planet Rock', rbCountry:'GB', directoryFirst:true,
+      bauerCodes:['pln','prk','planetrock']
+    },
+    {
+      id:'absrock', name:'Absolute Radio', sub:'Rock · UK', color:'#34d069',
+      urls:[], rbSearch:'Absolute Radio', rbCountry:'GB', directoryFirst:true,
+      bauerCodes:['abr','absoluteradio','abs']
+    },
+    {
+      id:'abs90s', name:'Absolute 90s', sub:'90s Rock · UK', color:'#2bb3ff',
+      urls:['https://media-ice.musicradio.com/AbsoluteRadio90sMP3'],
+      bauerCodes:['a9s','absolute90s']
+    },
+    {
+      id:'talksport', name:'talkSPORT', sub:'Sport · UK', color:'#ff8a00',
+      urls:[], rbSearch:'talkSPORT', rbCountry:'GB'
+    },
+    {
+      id:'capital', name:'Capital FM', sub:'Pop · UK', color:'#ff5fa2',
+      urls:[], rbSearch:'Capital FM', rbCountry:'GB', directoryFirst:true
+    },
+    {
+      id:'sanef-idf', name:'Sanef 107.7', sub:'107.7 FM · Île-de-France', color:'#ffb340',
+      urls:['https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3']
+    },
+    {
+      id:'sanef-reg', name:'Sanef 107.7 Régions', sub:'107.7 FM · Nord / Est / Ouest', color:'#ff8a00',
+      urls:[
+        'https://sanef.ice.infomaniak.ch/sanef1077-regions.mp3',
+        'https://sanef.ice.infomaniak.ch/sanef1077-nord.mp3'
+      ]
     }
   ];
 
@@ -297,30 +269,8 @@
   let current = 0;
   let urlIdx = 0;
   let wantPlaying = false;
-  let netOk = null; // null = unknown, true/false after probe
-
   const $ = id => document.getElementById(id);
   const player = $('player');
-
-  /* ---------------- environment probe ----------------
-     If we are running inside a sandboxed preview (e.g. a chat app's file
-     viewer), ALL outside connections are blocked by its security policy and
-     no stream can ever play. Detect it and tell the user clearly. */
-  async function probeNetwork(){
-    netOk = false;
-    for(const base of ['https://all.api.radio-browser.info','https://de2.api.radio-browser.info','https://fi1.api.radio-browser.info']){
-      try{
-        const r = await fetch(base + '/json/config', {cache:'no-store', signal: AbortSignal.timeout(4000)});
-        if(r.ok){ netOk = true; break; }
-      }catch(e){}
-    }
-    if(netOk === false){
-      banner('<b>Streams are blocked in this window.</b> This preview sandbox does not allow internet audio. ' +
-        'Save this file and open it directly in <b>Safari or Chrome</b> (or host it on any web server) — everything will work there.');
-    }
-    return netOk;
-  }
-  function banner(html){ const b=$('banner'); b.innerHTML=html; b.classList.add('show'); }
 
   /* ---------------- persistence ----------------
      Saves to the browser's localStorage, which persists across refreshes,
@@ -459,8 +409,7 @@
       if(urls.length){ st.urls = urls.slice(0,4); save(); }
       else setStatus('error','No stream found — use Search in settings');
     }catch(e){
-      if(netOk === false) setStatus('error','Network blocked in this window');
-      else setStatus('error','Directory unreachable — check connection');
+      setStatus('error','Directory unreachable — check connection');
     }
   }
 
@@ -557,8 +506,6 @@
       setStatus('buffering','Refreshing stream sources…');
       if(await refreshUrls(st)){ urlIdx = 0; play(); return; }
     }
-    if(netOk === null) await probeNetwork();
-    if(netOk === false){ setStatus('error','Network blocked — open in Safari/Chrome'); return; }
     if(st.bauerCodes){
       setStatus('error','Blocked by broadcaster — no relay available right now');
     }else{
@@ -735,9 +682,7 @@
         box.appendChild(row);
       });
     }catch(e){
-      box.innerHTML = '<div class="result"><div class="meta"><div class="rname">' +
-        (netOk===false ? 'Network blocked in this window' : 'Directory unreachable') +
-        '</div></div></div>';
+      box.innerHTML = '<div class="result"><div class="meta"><div class="rname">Directory unreachable — check connection</div></div></div>';
     }
   }
 
@@ -858,14 +803,11 @@
 
   function startGeo(){
     if(!('geolocation' in navigator)){
-      banner('<b>No location support</b> on this browser — Sanef auto-switch is unavailable.');
+      setStatus('Location not supported — Sanef auto unavailable');
       geoAuto=false; renderGeoToggle(); return;
     }
-    if(!window.isSecureContext){
-      banner('<b>Location needs HTTPS.</b> Host the app (or open via https) for Sanef auto-switch to work.');
-    }
     geoWatch = navigator.geolocation.watchPosition(geoTick, err=>{
-      banner('<b>Location unavailable:</b> '+(err.code===1?'permission denied — allow it in browser settings.':'no GPS fix yet.'));
+      setStatus(err.code===1 ? 'Location permission denied' : 'Waiting for GPS fix…');
     }, {enableHighAccuracy:false, maximumAge:30000, timeout:25000});
     renderGeoChip(null);
   }
@@ -892,29 +834,63 @@
     geoAuto ? startGeo() : stopGeo();
   };
 
+  /* ---------------- phone-call auto-resume ----------------
+     The Audio Focus API isn't available in browsers, but we can listen to the
+     page's visibility and the audio element's own interruption events to
+     detect when a call ends and restart playback automatically. */
+  let wasPlayingBeforeInterrupt = false;
+
+  // 'pause' fires both for user taps and for system interruptions (calls,
+  // Siri, GPS prompts). We distinguish them by whether *we* triggered it.
+  player.addEventListener('pause', ()=>{
+    if(wantPlaying){
+      // paused externally while we still want audio → record it
+      wasPlayingBeforeInterrupt = true;
+    }
+  });
+
+  // When the call ends the browser resumes the audio context. On iOS the audio
+  // element stays paused but 'ended' / 'stalled' don't fire — the most
+  // reliable hook is the page becoming visible again (user swipes back).
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible' && wasPlayingBeforeInterrupt && wantPlaying){
+      wasPlayingBeforeInterrupt = false;
+      player.play().catch(()=>{});
+    }
+  });
+
+  // Android raises 'play' automatically on audio-focus regain; on iOS we also
+  // get a second chance via the 'playing' event resetting the flag.
+  player.addEventListener('playing', ()=>{ wasPlayingBeforeInterrupt = false; });
+
   /* ---------------- boot ---------------- */
   (async ()=>{
     loadSaved();
     loadGeoSetting();
-    // restore the preset that was selected last time (without auto-playing)
+
+    // Default to Rádio Cidade; restore user's last choice if they changed it
+    const defaultId = 'cidade';
     const lastId = store.get('drive-radio-last');
-    if(lastId){
-      const idx = stations.findIndex(s=>s.id===lastId);
-      if(idx>=0) current = idx;
-    }
+    const targetId = lastId || defaultId;
+    const idx = stations.findIndex(s => s.id === targetId);
+    current = idx >= 0 ? idx : stations.findIndex(s => s.id === defaultId);
+    if(current < 0) current = 0;
+
     renderPresets();
     renderNow();
     renderGeoToggle();
     if(geoAuto) startGeo();
-    const ok = await probeNetwork();
-    if(ok){
-      // Background-refresh directory stations that are missing or stale —
-      // never blocks the UI, so launch and first play stay instant.
-      const STALE = 7*24*60*60*1000;
-      stations
-        .filter(s => s.rbSearch && (!s.urls.length || !s.urlsTs || Date.now() - s.urlsTs > STALE))
-        .forEach(s => refreshUrls(s));
-    }
+
+    // Background-refresh stale/missing directory stations without blocking
+    const STALE = 7*24*60*60*1000;
+    stations
+      .filter(s => s.rbSearch && (!s.urls.length || !s.urlsTs || Date.now() - s.urlsTs > STALE))
+      .forEach(s => refreshUrls(s));
+
+    // Auto-play Rádio Cidade (or whatever was last playing) on launch.
+    // iOS requires a user gesture before the first play; the .catch() silently
+    // handles that case — the user just taps play once and it works from then on.
+    tune(current, true);
   })();
 })();
 </script>
