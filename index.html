@@ -34,6 +34,13 @@
     flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
     text-align:center;padding:8px 20px 0;min-height:0;position:relative;
   }
+  #npLogo{
+    width:clamp(56px,16vw,88px);height:clamp(56px,16vw,88px);
+    border-radius:18px;margin:0 auto 14px;display:none;overflow:hidden;
+    background:#fff;box-shadow:0 6px 26px rgba(0,0,0,.45);position:relative;z-index:1;
+  }
+  #npLogo.show{display:block}
+  #npLogo img{width:100%;height:100%;object-fit:contain}
   #stationBadge{
     font-size:clamp(13px,3.5vw,16px);font-weight:700;letter-spacing:.18em;text-transform:uppercase;
     color:var(--accent);margin-bottom:8px;transition:color .3s;
@@ -58,6 +65,14 @@
     position:absolute;inset:0;pointer-events:none;opacity:.55;transition:background 1s;
     background:radial-gradient(60% 45% at 50% 42%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
   }
+
+  /* ---------- Avatars (logos) ---------- */
+  .avatar{
+    width:46px;height:46px;border-radius:12px;flex-shrink:0;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:20px;color:#0b0c10;line-height:1;
+  }
+  .avatar img{width:100%;height:100%;object-fit:contain;background:#fff}
 
   /* ---------- Transport ---------- */
   #transport{
@@ -86,15 +101,16 @@
   .preset{
     border:none;border-radius:20px;cursor:pointer;text-align:left;
     background:var(--panel);color:var(--text);
-    padding:16px 18px;min-height:clamp(72px,10vh,96px);
-    display:flex;flex-direction:column;justify-content:center;gap:4px;
+    padding:14px 16px;min-height:clamp(72px,10vh,96px);
+    display:flex;flex-direction:row;align-items:center;gap:14px;
     border-left:6px solid var(--pc,#555);
     transition:transform .08s, background .2s;
   }
   .preset:active{transform:scale(.97)}
   .preset.active{background:color-mix(in srgb, var(--pc,#555) 22%, var(--panel));outline:2px solid var(--pc,#555)}
-  .preset .pname{font-size:clamp(16px,4.4vw,20px);font-weight:800;line-height:1.15}
-  .preset .pfreq{font-size:clamp(12px,3.2vw,14px);font-weight:700;color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+  .preset .pmeta{display:flex;flex-direction:column;justify-content:center;gap:4px;min-width:0;flex:1}
+  .preset .pname{font-size:clamp(16px,4.4vw,20px);font-weight:800;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .preset .pfreq{font-size:clamp(12px,3.2vw,14px);font-weight:700;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   /* ---------- Top bar ---------- */
   #topbar{display:flex;justify-content:flex-end;padding:8px 14px 0}
@@ -105,17 +121,10 @@
   #gear:active{background:var(--panel)}
 
   /* ---------- Geo auto-tune chip ---------- */
-  #geoChip{
-    display:none;margin-top:12px;font-size:13px;font-weight:800;letter-spacing:.1em;
-    padding:7px 16px;border-radius:999px;background:var(--panel);color:var(--dim);
-    text-transform:uppercase;position:relative;z-index:1;
-  }
-  #geoChip.armed{display:inline-block}
-  #geoChip.inside{
-    display:inline-block;color:var(--text);
-    background:color-mix(in srgb, var(--accent) 28%, var(--panel));
-    outline:1px solid color-mix(in srgb, var(--accent) 60%, transparent);
-  }
+  /* Sanef auto-tune status lives in Settings now, not on the main view */
+  #geoStatus{margin-top:6px;font-weight:800;letter-spacing:.03em;color:var(--dim);text-transform:none}
+  #geoStatus:empty{display:none}
+  #geoStatus.on{color:var(--text)}
   .stItem .ssub.wrap{white-space:normal;line-height:1.35}
 
   /* ---------- Settings sheet ---------- */
@@ -161,11 +170,11 @@
 
 <div id="nowPlaying">
   <div id="glow"></div>
+  <div id="npLogo"></div>
   <div id="stationBadge">DAB &middot; PRESET 1</div>
   <div id="stationName">&mdash;</div>
   <div id="trackName"></div>
   <div id="statusRow"><div id="statusDot"></div><div id="statusText">Tap play to start</div></div>
-  <div id="geoChip"></div>
 </div>
 
 <div id="transport">
@@ -192,6 +201,7 @@
     <div class="meta">
       <div class="sname">Switch by location</div>
       <div class="ssub wrap">Auto-tunes to Sanef 107.7 when you're driving its motorways (A1, A2, A4, A13, A14, A16, A26, A29) and returns to your previous station when you leave. Needs location permission and HTTPS.</div>
+      <div class="ssub wrap" id="geoStatus"></div>
     </div>
     <button class="miniBtn" id="geoToggle">Off</button>
   </div>
@@ -240,13 +250,8 @@
       bauerCodes:['abr','absoluteradio','abs']
     },
     {
-      id:'abs90s', name:'Absolute 90s', sub:'90s Rock · UK', color:'#2bb3ff',
-      urls:['https://media-ice.musicradio.com/AbsoluteRadio90sMP3'],
-      bauerCodes:['a9s','absolute90s']
-    },
-    {
-      id:'talksport', name:'talkSPORT', sub:'Sport · UK', color:'#ff8a00',
-      urls:[], rbSearch:'talkSPORT', rbCountry:'GB'
+      id:'cbn', name:'CBN Brasil', sub:'News · Brazil', color:'#2bb3ff',
+      urls:[], rbSearch:'CBN', rbCountry:'BR', rbNameHint:/cbn|brasil/i
     },
     {
       id:'capital', name:'Capital FM', sub:'Pop · UK', color:'#ff5fa2',
@@ -264,6 +269,22 @@
       ]
     }
   ];
+
+  // Stations to drop from any saved list on load, so stale or broken entries
+  // don't linger for an existing install. Matched by id and by name/sub so we
+  // catch leftovers from older app versions even when their id differs. They're
+  // also gone from DEFAULTS, so they're never re-added.
+  function isRetired(s){
+    const id   = s.id;
+    const name = (s.name||'').toLowerCase().trim();
+    const sub  = (s.sub||'').toLowerCase();
+    if(id === 'abs90s'    || name === 'absolute 90s') return true;
+    if(id === 'talksport' || name === 'talksport')    return true;
+    // Drop the dead "Planet Rock · DAB · UK" duplicate but keep the working
+    // "Planet Rock · Classic Rock · UK".
+    if(name === 'planet rock' && /\bdab\b/.test(sub)) return true;
+    return false;
+  }
 
   let stations = DEFAULTS.map(s => ({...s, urls:[...s.urls]}));
   let current = 0;
@@ -291,7 +312,8 @@
     try{
       const raw = store.get('drive-radio-stations');
       if(!raw) return;
-      const saved = JSON.parse(raw);
+      let saved = JSON.parse(raw);
+      if(Array.isArray(saved)) saved = saved.filter(s => !isRetired(s));
       if(Array.isArray(saved) && saved.length){
         // bring in any default stations added since the list was last saved
         DEFAULTS.forEach(d=>{
@@ -377,20 +399,32 @@
       return pa - pb;
     });
   }
+  // Pick a usable station logo (https favicon) from directory results.
+  function pickLogo(list){
+    for(const item of (list||[])){
+      const f = item.favicon;
+      if(f && /^https:\/\//.test(f)) return f;
+    }
+    return null;
+  }
   // Pull fresh, health-checked stream URLs for a station from the directory
   // and put them ahead of the shipped ones. Returns true if anything new came in.
   async function refreshUrls(st){
     if(!st.rbSearch) return false;
     try{
       const list = await rbSearch(st.rbSearch, st.rbCountry, st.rbExact);
-      const fresh = rankUrls(filterStations(list, st).map(playableUrl).filter(Boolean), st);
-      if(!fresh.length) return false;
+      const filtered = filterStations(list, st);
+      const fresh = rankUrls(filtered.map(playableUrl).filter(Boolean), st);
+      const logo = pickLogo(filtered);
+      let touched = false;
+      if(logo && !st.logo){ st.logo = logo; touched = true; }
+      if(!fresh.length){ if(touched) save(); return false; }
       const merged = [...new Set([...fresh, ...st.urls])];
       const changed = !st.urls.length || merged[0] !== st.urls[0] || merged.length !== st.urls.length;
       st.urls = merged.slice(0,6);
       st.urlsTs = Date.now();
       save();
-      return changed;
+      return changed || touched;
     }catch(e){ return false; }
   }
   function playableUrl(item){
@@ -405,7 +439,10 @@
     setStatus('buffering','Finding stream…');
     try{
       const list = await rbSearch(st.rbSearch, st.rbCountry);
-      const urls = rankUrls(filterStations(list, st).map(playableUrl).filter(Boolean), st);
+      const filtered = filterStations(list, st);
+      const urls = rankUrls(filtered.map(playableUrl).filter(Boolean), st);
+      const logo = pickLogo(filtered);
+      if(logo && !st.logo) st.logo = logo;
       if(urls.length){ st.urls = urls.slice(0,4); save(); }
       else setStatus('error','No stream found — use Search in settings');
     }catch(e){
@@ -437,6 +474,19 @@
     document.documentElement.style.setProperty('--accent', st.color || '#ff8a00');
     $('stationBadge').textContent = (st.sub || 'LIVE') + ' · PRESET ' + (current+1);
     $('stationName').textContent = st.name;
+    // now-playing logo: only show when we actually have an image (the big
+    // station name below already covers the no-logo case)
+    const np = $('npLogo');
+    np.innerHTML = '';
+    np.classList.remove('show');
+    if(st.logo){
+      const img = new Image();
+      img.alt = '';
+      img.onload = ()=> np.classList.add('show');
+      img.onerror = ()=>{ np.classList.remove('show'); np.innerHTML=''; };
+      img.src = st.logo;
+      np.appendChild(img);
+    }
     document.querySelectorAll('.preset').forEach((b,i)=>b.classList.toggle('active', i===current));
     updateMediaSession();
   }
@@ -445,6 +495,8 @@
     if(typeof autoTuning !== 'undefined' && !autoTuning) returnTo = null; // a manual change wins over auto-return
     current = (i + stations.length) % stations.length;
     urlIdx = 0;
+    reconnectDelay = RECONNECT_MIN;     // fresh station → fresh backoff
+    clearRecovery();
     if(typeof autoTuning === 'undefined' || !autoTuning) store.set('drive-radio-last', stations[current].id);
     stations[current]._refreshed = false;
     setTrack('');
@@ -476,9 +528,11 @@
     player.play().catch(()=>{ /* retried on next tap */ });
     showPlaying(true);
     startMeta();
+    armBufferWatch();   // if audio never arrives, recover instead of hanging
   }
   function stop(){
     wantPlaying = false;
+    clearRecovery();
     player.pause();
     player.removeAttribute('src'); player.load(); // drop the live buffer so resume is live, not stale
     setStatus('', 'Paused');
@@ -493,24 +547,69 @@
     if('mediaSession' in navigator) navigator.mediaSession.playbackState = on?'playing':'paused';
   }
 
-  player.addEventListener('playing', ()=> setStatus('live','Live'));
-  player.addEventListener('waiting', ()=> wantPlaying && setStatus('buffering','Buffering…'));
-  player.addEventListener('stalled', ()=> wantPlaying && setStatus('buffering','Buffering…'));
-  player.addEventListener('error', async ()=>{
+  /* ---------------- resilient recovery (tunnels, dead zones, outages) ----------------
+     A stream can drop for lots of reasons in a moving car. Rather than parking
+     on an error, we walk the known URLs, refresh from the directory once, then
+     keep retrying with exponential backoff — and reconnect instantly the moment
+     the network comes back. A watchdog covers the "connected but no audio" case
+     where the element silently buffers forever. */
+  const RECONNECT_MIN = 2000, RECONNECT_MAX = 30000, BUFFER_TIMEOUT = 14000;
+  let reconnectTimer = null, bufferWatch = null, reconnectDelay = RECONNECT_MIN;
+
+  function clearRecovery(){
+    if(reconnectTimer){ clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if(bufferWatch){ clearTimeout(bufferWatch); bufferWatch = null; }
+  }
+  function armBufferWatch(){
+    if(bufferWatch) clearTimeout(bufferWatch);
+    bufferWatch = setTimeout(()=>{ bufferWatch = null; if(wantPlaying) handleFailure(); }, BUFFER_TIMEOUT);
+  }
+  function scheduleReconnect(){
+    if(!wantPlaying || reconnectTimer) return;
+    setStatus('buffering', navigator.onLine ? 'Reconnecting…' : 'Waiting for signal…');
+    reconnectTimer = setTimeout(()=>{
+      reconnectTimer = null;
+      if(!wantPlaying) return;
+      if(!navigator.onLine){ scheduleReconnect(); return; } // hold until signal returns
+      urlIdx = 0;
+      stations[current]._refreshed = false;
+      play();
+    }, reconnectDelay);
+    reconnectDelay = Math.min(Math.round(reconnectDelay * 1.8), RECONNECT_MAX);
+  }
+  async function handleFailure(){
     if(!wantPlaying) return;
     const st = stations[current];
-    if(urlIdx < st.urls.length - 1){ urlIdx++; play(); return; }
-    // every known URL failed — fetch fresh ones from the directory once and retry
-    if(st.rbSearch && !st._refreshed){
+    if(urlIdx < st.urls.length - 1){ urlIdx++; play(); return; }   // try the next known relay
+    if(st.rbSearch && !st._refreshed){                              // ask the directory for fresh ones, once
       st._refreshed = true;
       setStatus('buffering','Refreshing stream sources…');
       if(await refreshUrls(st)){ urlIdx = 0; play(); return; }
     }
-    if(st.bauerCodes){
-      setStatus('error','Blocked by broadcaster — no relay available right now');
-    }else{
-      setStatus('error','Stream unavailable — try Search in settings');
-    }
+    scheduleReconnect();                                           // keep trying with backoff
+  }
+
+  player.addEventListener('playing', ()=>{
+    setStatus('live','Live');
+    clearRecovery();
+    reconnectDelay = RECONNECT_MIN;   // healthy again → reset backoff
+  });
+  player.addEventListener('waiting', ()=>{ if(wantPlaying){ setStatus('buffering','Buffering…'); armBufferWatch(); } });
+  player.addEventListener('stalled', ()=>{ if(wantPlaying){ setStatus('buffering','Buffering…'); armBufferWatch(); } });
+  player.addEventListener('error', ()=>{ if(wantPlaying) handleFailure(); });
+
+  // The moment the device regains connectivity, reconnect immediately instead
+  // of waiting out the backoff — this is the classic "out of the tunnel" case.
+  window.addEventListener('online', ()=>{
+    if(!wantPlaying) return;
+    clearRecovery();
+    reconnectDelay = RECONNECT_MIN;
+    urlIdx = 0;
+    stations[current]._refreshed = false;
+    play();
+  });
+  window.addEventListener('offline', ()=>{
+    if(wantPlaying) setStatus('buffering','Waiting for signal…');
   });
 
   /* ---------------- now playing track metadata ----------------
@@ -584,12 +683,16 @@
   function updateMediaSession(){
     if(!('mediaSession' in navigator)) return;
     const st = stations[current];
-    const art = svgArtwork(st);
+    // Prefer the station's real logo for the car display; fall back to a
+    // generated tile so there's always artwork.
+    const artwork = st.logo
+      ? [{src: st.logo, sizes:'512x512'}, {src: svgArtwork(st), sizes:'512x512', type:'image/svg+xml'}]
+      : [{src: svgArtwork(st), sizes:'512x512', type:'image/svg+xml'}];
     navigator.mediaSession.metadata = new MediaMetadata({
       title: lastTrack || st.name,                 // song on the car display when known
       artist: lastTrack ? st.name : (st.sub || 'Live radio'),
       album: 'Drive Radio',
-      artwork: [{src:art, sizes:'512x512', type:'image/svg+xml'}]
+      artwork
     });
     try{
       navigator.mediaSession.setActionHandler('play', ()=>play());
@@ -610,15 +713,37 @@
   }
 
   /* ---------------- UI ---------------- */
+  // A logo tile that gracefully degrades to a coloured letter if the station
+  // has no favicon, or if the favicon URL is dead/broken.
+  function avatarEl(st){
+    const wrap = document.createElement('div');
+    wrap.className = 'avatar';
+    wrap.style.background = st.color || '#555';
+    const letter = (st.name || '?').trim().charAt(0).toUpperCase() || '?';
+    wrap.textContent = letter;
+    if(st.logo){
+      const img = new Image();
+      img.alt = '';
+      img.onload = ()=>{ wrap.textContent = ''; wrap.style.background = '#fff'; wrap.appendChild(img); };
+      img.onerror = ()=>{ /* keep the coloured letter */ };
+      img.src = st.logo;
+    }
+    return wrap;
+  }
+
   function renderPresets(){
     const box = $('presets'); box.innerHTML='';
     stations.forEach((st,i)=>{
       const b = document.createElement('button');
       b.className = 'preset' + (i===current?' active':'');
       b.style.setProperty('--pc', st.color || '#888');
-      b.innerHTML = '<div class="pname"></div><div class="pfreq"></div>';
-      b.querySelector('.pname').textContent = st.name;
-      b.querySelector('.pfreq').textContent = st.sub || 'Live stream';
+      b.appendChild(avatarEl(st));
+      const meta = document.createElement('div');
+      meta.className = 'pmeta';
+      meta.innerHTML = '<div class="pname"></div><div class="pfreq"></div>';
+      meta.querySelector('.pname').textContent = st.name;
+      meta.querySelector('.pfreq').textContent = st.sub || 'Live stream';
+      b.appendChild(meta);
       b.onclick = ()=>tune(i);
       box.appendChild(b);
     });
@@ -629,21 +754,29 @@
     stations.forEach((st,i)=>{
       const row = document.createElement('div');
       row.className='stItem';
-      row.innerHTML = '<div class="meta"><div class="sname"></div><div class="ssub"></div></div>'
-        + '<button class="miniBtn up">&#8593;</button><button class="miniBtn danger del">Remove</button>';
-      row.querySelector('.sname').textContent = (i+1)+'. '+st.name;
-      row.querySelector('.ssub').textContent = st.urls[0] || '(stream found automatically)';
-      row.querySelector('.up').onclick = ()=>{
+      row.appendChild(avatarEl(st));
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.innerHTML = '<div class="sname"></div><div class="ssub"></div>';
+      meta.querySelector('.sname').textContent = (i+1)+'. '+st.name;
+      meta.querySelector('.ssub').textContent = st.urls[0] || '(stream found automatically)';
+      row.appendChild(meta);
+      const up = document.createElement('button');
+      up.className = 'miniBtn up'; up.innerHTML = '&#8593;';
+      up.onclick = ()=>{
         if(i===0) return;
         const t = stations[i-1]; stations[i-1]=stations[i]; stations[i]=t;
         save(); renderPresets(); renderStationList(); renderNow();
       };
-      row.querySelector('.del').onclick = ()=>{
+      const del = document.createElement('button');
+      del.className = 'miniBtn danger del'; del.textContent = 'Remove';
+      del.onclick = ()=>{
         if(stations.length<=1) return;
         stations.splice(i,1);
         if(current>=stations.length) current=0;
         save(); renderPresets(); renderStationList(); renderNow();
       };
+      row.appendChild(up); row.appendChild(del);
       box.appendChild(row);
     });
   }
@@ -667,18 +800,26 @@
       if(!list.length){ box.innerHTML='<div class="result"><div class="meta"><div class="rname">No results</div></div></div>'; return; }
       list.forEach(item=>{
         const u = playableUrl(item);
+        const logo = (item.favicon && /^https:\/\//.test(item.favicon)) ? item.favicon : undefined;
         const row = document.createElement('div');
         row.className='result';
-        row.innerHTML = '<div class="meta"><div class="rname"></div><div class="rsub"></div></div><button class="miniBtn">Add</button>';
-        row.querySelector('.rname').textContent = item.name;
-        row.querySelector('.rsub').textContent = [item.country, item.codec, item.bitrate? item.bitrate+'kbps':''].filter(Boolean).join(' · ');
-        const btn = row.querySelector('.miniBtn');
+        row.appendChild(avatarEl({name:item.name, color:randColor(), logo}));
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.innerHTML = '<div class="rname"></div><div class="rsub"></div>';
+        meta.querySelector('.rname').textContent = item.name;
+        meta.querySelector('.rsub').textContent = [item.country, item.codec, item.bitrate? item.bitrate+'kbps':''].filter(Boolean).join(' · ');
+        row.appendChild(meta);
+        const btn = document.createElement('button');
+        btn.className = 'miniBtn';
+        btn.textContent = 'Add';
         if(!u){ btn.disabled = true; btn.textContent='Not playable'; btn.style.opacity=.5; }
         else btn.onclick = ()=>{
           stations.push({ id:'c'+Date.now(), name:item.name.trim(), sub:item.country||'Live stream',
-            color:randColor(), urls:[u] });
+            color:randColor(), urls:[u], logo });
           save(); renderStationList(); btn.textContent='Added ✓'; btn.disabled=true;
         };
+        row.appendChild(btn);
         box.appendChild(row);
       });
     }catch(e){
@@ -793,21 +934,25 @@
     renderGeoChip(null);
   }
 
+  // The live auto-tune status used to sit on the now-playing screen. It now
+  // renders into the Settings panel (next to the toggle), keeping the main
+  // view clean while the feature stays accessible in the config menu.
   function renderGeoChip(n){
-    const c=$('geoChip');
+    const c=$('geoStatus');
+    if(!c) return;
     if(!geoAuto){ c.className=''; c.textContent=''; return; }
-    if(onSanef){ c.className='inside'; c.textContent='On Sanef network'+(n&&n.route?' · '+n.route:''); }
-    else if(!lastFix){ c.className='armed'; c.textContent='Sanef auto · waiting for GPS'; }
-    else { c.className='armed'; c.textContent='Sanef auto · armed'; }
+    if(onSanef){ c.className='on'; c.textContent='● On Sanef network'+(n&&n.route?' · '+n.route:''); }
+    else if(!lastFix){ c.className=''; c.textContent='○ Armed · waiting for GPS…'; }
+    else { c.className=''; c.textContent='○ Armed'; }
   }
 
   function startGeo(){
     if(!('geolocation' in navigator)){
-      setStatus('Location not supported — Sanef auto unavailable');
+      setStatus('error','Location not supported — Sanef auto unavailable');
       geoAuto=false; renderGeoToggle(); return;
     }
     geoWatch = navigator.geolocation.watchPosition(geoTick, err=>{
-      setStatus(err.code===1 ? 'Location permission denied' : 'Waiting for GPS fix…');
+      setStatus('error', err.code===1 ? 'Location permission denied' : 'Waiting for GPS fix…');
     }, {enableHighAccuracy:false, maximumAge:30000, timeout:25000});
     renderGeoChip(null);
   }
@@ -876,16 +1021,23 @@
     current = idx >= 0 ? idx : stations.findIndex(s => s.id === defaultId);
     if(current < 0) current = 0;
 
+    save();   // persist the migrated list (CBN added, Absolute 90s removed) right away
     renderPresets();
     renderNow();
     renderGeoToggle();
     if(geoAuto) startGeo();
 
-    // Background-refresh stale/missing directory stations without blocking
+    // Background-refresh directory stations without blocking: those with no
+    // URLs, stale URLs, OR no logo yet. The last case backfills favicons for
+    // built-in stations whose streams were already cached (so they'd otherwise
+    // never re-hit the directory and never pick up a logo). Re-render when one
+    // resolves so the new logo appears on the tiles and now-playing view.
     const STALE = 7*24*60*60*1000;
     stations
-      .filter(s => s.rbSearch && (!s.urls.length || !s.urlsTs || Date.now() - s.urlsTs > STALE))
-      .forEach(s => refreshUrls(s));
+      .filter(s => s.rbSearch && (!s.logo || !s.urls.length || !s.urlsTs || Date.now() - s.urlsTs > STALE))
+      .forEach(s => refreshUrls(s).then(touched => {
+        if(touched){ renderPresets(); if(stations[current] === s) renderNow(); }
+      }));
 
     // Auto-play Rádio Cidade (or whatever was last playing) on launch.
     // iOS requires a user gesture before the first play; the .catch() silently
