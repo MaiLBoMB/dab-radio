@@ -31,8 +31,8 @@
 
   /* ---------- Now playing ---------- */
   #nowPlaying{
-    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    text-align:center;padding:8px 20px 0;min-height:0;position:relative;
+    flex:0 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:8px 20px 0;min-height:0;overflow:hidden;position:relative;
   }
   #npLogo{
     width:clamp(56px,16vw,88px);height:clamp(56px,16vw,88px);
@@ -56,7 +56,7 @@
   #trackName:empty{opacity:0}
   #statusRow{display:flex;align-items:center;gap:10px;margin-top:10px;min-height:26px}
   #statusDot{width:12px;height:12px;border-radius:50%;background:var(--dim);transition:background .3s}
-  #statusDot.live{background:#34d069;box-shadow:0 0 12px #34d06988;animation:pulse 1.6s infinite}
+  #statusDot.live{background:#34d069;box-shadow:0 0 12px #34d06988}
   #statusDot.buffering{background:var(--accent);animation:pulse .7s infinite}
   #statusDot.error{background:#ff4d4d}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
@@ -95,14 +95,16 @@
 
   /* ---------- Presets ---------- */
   #presets{
-    display:grid;grid-template-columns:repeat(2,1fr);gap:8px;
+    display:grid;grid-template-columns:repeat(2,1fr);
+    grid-auto-rows:minmax(0,1fr);
+    gap:8px;
     padding:0 16px calc(12px + var(--safe-bottom));
-    max-height:50dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;
+    flex:1 1 auto;min-height:0;overflow:hidden;
   }
   .preset{
     border:none;border-radius:16px;cursor:pointer;text-align:left;
     background:var(--panel);color:var(--text);
-    padding:10px 12px;min-height:clamp(52px,7.5vh,68px);
+    padding:8px 12px;min-height:0;overflow:hidden;
     display:flex;flex-direction:row;align-items:center;gap:11px;
     border-left:5px solid var(--pc,#555);
     transition:transform .08s, background .2s;
@@ -620,7 +622,7 @@
      The track is shown on screen AND pushed to the car display via Media Session. */
   let metaTimer = null;
   let lastTrack = '';
-  function startMeta(){ stopMeta(false); pollMeta(); metaTimer = setInterval(pollMeta, 15000); }
+  function startMeta(){ stopMeta(false); pollMeta(); metaTimer = setInterval(pollMeta, 20000); }
   function stopMeta(clear = true){
     if(metaTimer){ clearInterval(metaTimer); metaTimer = null; }
     if(clear) setTrack('');
@@ -634,7 +636,7 @@
   }
 
   async function pollMeta(){
-    if(!wantPlaying) return;
+    if(!wantPlaying || document.hidden) return;   // no network work while screen is off / app backgrounded
     const st = stations[current];
     let track = '';
     if(st.bauerCodes && st.bauerCodes.length){
@@ -999,10 +1001,12 @@
   // element stays paused but 'ended' / 'stalled' don't fire — the most
   // reliable hook is the page becoming visible again (user swipes back).
   document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState === 'visible' && wasPlayingBeforeInterrupt && wantPlaying){
+    if(document.visibilityState !== 'visible') return;
+    if(wasPlayingBeforeInterrupt && wantPlaying){
       wasPlayingBeforeInterrupt = false;
       player.play().catch(()=>{});
     }
+    if(wantPlaying) pollMeta();   // catch up the track readout after the screen wakes
   });
 
   // Android raises 'play' automatically on audio-focus regain; on iOS we also
