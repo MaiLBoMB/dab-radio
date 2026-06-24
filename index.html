@@ -260,11 +260,11 @@
       urls:[], rbSearch:'Capital FM', rbCountry:'GB', directoryFirst:true
     },
     {
-      id:'sanef-idf', name:'Sanef 107.7', sub:'107.7 FM · Île-de-France', color:'#ffb340',
+      id:'sanef-idf', name:'Sanef 107.7', sub:'A1 A4 A13 A14 · Île-de-France', color:'#ffb340',
       urls:['https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3']
     },
     {
-      id:'sanef-reg', name:'Sanef 107.7 Régions', sub:'107.7 FM · Nord / Est / Ouest', color:'#ff8a00',
+      id:'sanef-reg', name:'Sanef 107.7 Régions', sub:'A2 A16 A26 A29 · Nord/Est/Ouest', color:'#ff8a00',
       urls:[
         'https://sanef.ice.infomaniak.ch/sanef1077-regions.mp3',
         'https://sanef.ice.infomaniak.ch/sanef1077-nord.mp3'
@@ -326,6 +326,9 @@
         saved.forEach(s=>{
           const d = DEFAULTS.find(x=>x.id===s.id);
           if(!d) return;
+          // Keep built-in labels in sync with the shipped defaults so updated
+          // names/subs (e.g. the Sanef motorway lists) show up on existing installs.
+          s.name = d.name; s.sub = d.sub; s.color = d.color;
           s.bauerCodes = d.bauerCodes ? [...d.bauerCodes] : undefined;
           s.rbSearch = d.rbSearch; s.rbCountry = d.rbCountry; s.rbExact = d.rbExact;
           s.directoryFirst = d.directoryFirst;
@@ -982,36 +985,33 @@
     geoAuto ? startGeo() : stopGeo();
   };
 
-  /* ---------------- phone-call auto-resume ----------------
-     The Audio Focus API isn't available in browsers, but we can listen to the
-     page's visibility and the audio element's own interruption events to
-     detect when a call ends and restart playback automatically. */
-  let wasPlayingBeforeInterrupt = false;
+  /* ---------------- interruption auto-resume (calls, Siri, nav prompts) ----------------
+     There's no Audio Focus API in the browser, so rather than trying to catch
+     the interruption itself, we watch for its *end* — the page returning to the
+     foreground — and reconcile intent with reality: if we still want audio but
+     the element is paused, reconnect. This covers incoming AND outgoing calls,
+     Siri, navigation voice prompts, and other apps taking audio focus, on both
+     iOS and Android, without depending on any single event firing.
 
-  // 'pause' fires both for user taps and for system interruptions (calls,
-  // Siri, GPS prompts). We distinguish them by whether *we* triggered it.
-  player.addEventListener('pause', ()=>{
-    if(wantPlaying){
-      // paused externally while we still want audio → record it
-      wasPlayingBeforeInterrupt = true;
-    }
-  });
+     The previous version called a bare player.play() on the stale buffer, which
+     silently stalled because the live connection had dropped during the call.
+     We now go through the app-level play(), which reconnects the stream from
+     scratch and arms the stall watchdog + reconnection fallback, so even a
+     failed first resume recovers on its own. */
+  function resumeIfNeeded(){
+    if(!wantPlaying) return;                              // user isn't asking for audio
+    if(document.visibilityState !== 'visible') return;   // still in the call / another app
+    if(!player.paused) return;                           // already playing — nothing to do
+    play();                                              // intent says play but we're paused → reconnect live
+  }
 
-  // When the call ends the browser resumes the audio context. On iOS the audio
-  // element stays paused but 'ended' / 'stalled' don't fire — the most
-  // reliable hook is the page becoming visible again (user swipes back).
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState !== 'visible') return;
-    if(wasPlayingBeforeInterrupt && wantPlaying){
-      wasPlayingBeforeInterrupt = false;
-      player.play().catch(()=>{});
-    }
-    if(wantPlaying) pollMeta();   // catch up the track readout after the screen wakes
+    resumeIfNeeded();
+    if(wantPlaying) pollMeta();   // catch the track readout up after the screen wakes
   });
-
-  // Android raises 'play' automatically on audio-focus regain; on iOS we also
-  // get a second chance via the 'playing' event resetting the flag.
-  player.addEventListener('playing', ()=>{ wasPlayingBeforeInterrupt = false; });
+  window.addEventListener('focus',   resumeIfNeeded);   // call-end / app-switch back
+  window.addEventListener('pageshow', resumeIfNeeded);  // returning from the bfcache
 
   /* ---------------- boot ---------------- */
   (async ()=>{
