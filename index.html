@@ -199,11 +199,11 @@
   <h2>Stations</h2>
   <p class="hint">Search the worldwide radio directory to add a station, or paste a direct stream URL (.mp3 / .aac). Steering-wheel "next / previous track" buttons switch presets in order.</p>
 
-  <h3 class="sec">Automatic Sanef 107.7</h3>
+  <h3 class="sec">Automatic motorway radio</h3>
   <div class="stItem">
     <div class="meta">
       <div class="sname">Switch by location</div>
-      <div class="ssub wrap">Auto-tunes to Sanef 107.7 when you're driving its motorways (A1, A2, A4, A13, A14, A16, A26, A29) and returns to your previous station when you leave. Needs location permission and HTTPS.</div>
+      <div class="ssub wrap">Auto-tunes to the motorway radio while you're driving a covered network &mdash; Sanef 107.7 on its French autoroutes, Rai Isoradio on the Italian autostrade &mdash; and returns to your previous station when you leave. Needs location permission and HTTPS.</div>
       <div class="ssub wrap" id="geoStatus"></div>
     </div>
     <button class="miniBtn" id="geoToggle">Off</button>
@@ -260,11 +260,21 @@
       urls:[], rbSearch:'Capital FM', rbCountry:'GB', directoryFirst:true
     },
     {
-      id:'sanef-idf', name:'Sanef 107.7', sub:'A1 A4 A13 A14 · Île-de-France', color:'#ffb340',
+      // Italy's motorway radio — the counterpart of Sanef 107.7. Rai
+      // Isoradio (103.3 FM, same frequency nationwide) carries traffic and
+      // travel bulletins for the autostrade and is relayed inside tunnels.
+      // Free public Rai stream; the directory lookup keeps URLs fresh.
+      id:'isoradio', name:'Rai Isoradio', sub:'103.3 · Autostrade · Italy', color:'#4f8cff',
+      urls:['https://icestreaming.rai.it/6.mp3'],
+      rbSearch:'Isoradio', rbCountry:'IT', rbNameHint:/isoradio/i,
+      preferHosts:['rai.it']
+    },
+    {
+      id:'sanef-idf', name:'Sanef 107.7', sub:'107.7 · Île-de-France', color:'#ffb340',
       urls:['https://sanef.ice.infomaniak.ch/sanef1077-idf.mp3']
     },
     {
-      id:'sanef-reg', name:'Sanef 107.7 Régions', sub:'A2 A16 A26 A29 · Nord/Est/Ouest', color:'#ff8a00',
+      id:'sanef-reg', name:'Sanef 107.7 Régions', sub:'107.7 · Nord / Est / Ouest', color:'#ff8a00',
       urls:[
         'https://sanef.ice.infomaniak.ch/sanef1077-regions.mp3',
         'https://sanef.ice.infomaniak.ch/sanef1077-nord.mp3'
@@ -280,9 +290,14 @@
     const id   = s.id;
     const name = (s.name||'').toLowerCase().trim();
     const sub  = (s.sub||'').toLowerCase();
-    if(id === 'abs90s'    || name === 'absolute 90s') return true;
     if(id === 'talksport' || name === 'talksport')    return true;
-    if(id === 'absrock'   || name === 'absolute radio') return true;  // dead Bauer stream
+    // ALL "Absolute …" Bauer presets (Absolute Radio / Absolute Rock /
+    // Absolute Classic Rock / Absolute 90s…): their direct streams are
+    // token-gated and die constantly. Match by prefix so any variant left
+    // over from an older install is purged, whatever its exact id/name.
+    if(id === 'abs90s' || id === 'absrock' || /^absolute\b/.test(name)) return true;
+    // Short-lived preset from the previous build, replaced by Rai Isoradio.
+    if(id === 'virginit' || name === 'virgin radio rock') return true;
     // Drop the dead "Planet Rock · DAB · UK" duplicate but keep the working
     // "Planet Rock · Classic Rock · UK".
     if(name === 'planet rock' && /\bdab\b/.test(sub)) return true;
@@ -292,6 +307,7 @@
   let stations = DEFAULTS.map(s => ({...s, urls:[...s.urls]}));
   let current = 0;
   let urlIdx = 0;
+  let tuneSeq = 0;         // bumped on every tune(); stale async tunes must bail
   let wantPlaying = false;
   const $ = id => document.getElementById(id);
   const player = $('player');
@@ -498,6 +514,7 @@
   }
 
   async function tune(i, autoplay = true){
+    const seq = ++tuneSeq;  // rapid skips: only the NEWEST tune may act after an await
     if(typeof autoTuning !== 'undefined' && !autoTuning) returnTo = null; // a manual change wins over auto-return
     current = (i + stations.length) % stations.length;
     urlIdx = 0;
@@ -513,6 +530,10 @@
     if(!st.urls.length && st.rbSearch){
       setStatus('buffering','Finding a working stream…');
       await refreshUrls(st);
+      // Steering-wheel taps come fast: if the user skipped again while we
+      // were fetching, this stale tune must NOT continue — its play() would
+      // land on top of the newer station's load and kill the audio.
+      if(seq !== tuneSeq) return;
     }
     // append genre fallbacks (e.g. for stations the broadcaster blocks) once,
     // so playback drops to them automatically if the real relays don't answer
@@ -531,7 +552,12 @@
     setStatus('buffering','Connecting…');
     player.src = u;
     player.load();
-    player.play().catch(()=>{ /* retried on next tap */ });
+    player.play().catch(()=>{
+      // Rejected because iOS needs a first-gesture, OR because another app
+      // (a phone call, Siri) holds audio focus right now. Keep retrying —
+      // the poller succeeds the moment the OS hands audio back.
+      if(wantPlaying) armResumePoll();
+    });
     showPlaying(true);
     startMeta();
     armBufferWatch();   // if audio never arrives, recover instead of hanging
@@ -539,6 +565,7 @@
   function stop(){
     wantPlaying = false;
     clearRecovery();
+    stopResumePoll();
     player.pause();
     player.removeAttribute('src'); player.load(); // drop the live buffer so resume is live, not stale
     setStatus('', 'Paused');
@@ -585,12 +612,15 @@
   }
   async function handleFailure(){
     if(!wantPlaying) return;
+    const seq = tuneSeq;                                            // remember which station this failure belongs to
     const st = stations[current];
     if(urlIdx < st.urls.length - 1){ urlIdx++; play(); return; }   // try the next known relay
     if(st.rbSearch && !st._refreshed){                              // ask the directory for fresh ones, once
       st._refreshed = true;
       setStatus('buffering','Refreshing stream sources…');
-      if(await refreshUrls(st)){ urlIdx = 0; play(); return; }
+      const ok = await refreshUrls(st);
+      if(seq !== tuneSeq) return;                                   // user skipped mid-refresh — the new tune owns playback now
+      if(ok){ urlIdx = 0; play(); return; }
     }
     scheduleReconnect();                                           // keep trying with backoff
   }
@@ -847,12 +877,15 @@
     return c[Math.floor(Math.random()*c.length)];
   }
 
-  /* ---------------- Sanef geofence auto-tune ----------------
-     Simplified corridors of the Sanef/SAPN motorway network as [lat,lon]
-     polylines. If a GPS fix lands within ENTER_KM of any corridor (twice in a
-     row, to ignore GPS jitter), the radio auto-tunes to Sanef 107.7 —
-     Île-de-France stream near Paris, Régions elsewhere. Leaving the corridor
-     by EXIT_KM (twice in a row) returns to the previous station. */
+  /* ---------------- motorway geofence auto-tune (Sanef + Isoradio) ----------------
+     Simplified corridors of two motorway radio networks as [lat,lon]
+     polylines: the Sanef/SAPN autoroutes in France (→ Sanef 107.7) and the
+     main Italian autostrade (→ Rai Isoradio, which covers the whole network
+     on one frequency). If a GPS fix lands within ENTER_KM of any corridor
+     (twice in a row, to ignore GPS jitter), the radio auto-tunes to that
+     network's station — for Sanef, the Île-de-France stream near Paris and
+     Régions elsewhere. Leaving the corridor by EXIT_KM (twice in a row)
+     returns to the previous station. */
   const SANEF_ROUTES = {
     'A1' :[[48.97,2.49],[49.12,2.56],[49.33,2.70],[49.55,2.75],[49.70,2.77],[49.86,2.80],[50.10,2.80],[50.28,2.78],[50.45,2.95],[50.57,3.07]],
     'A2' :[[49.98,2.93],[50.12,3.10],[50.25,3.30],[50.35,3.48],[50.40,3.60]],
@@ -864,11 +897,47 @@
     'A29':[[49.52,0.25],[49.55,0.60],[49.62,1.00],[49.70,1.40],[49.80,1.80],[49.88,2.20],[49.85,2.60],[49.85,3.00],[49.85,3.25]]
   };
   const PARIS = [48.8566, 2.3522];
+
+  // Main Italian autostrade, simplified. Isoradio broadcasts the same
+  // programme nationwide, so unlike Sanef there's no per-region stream to
+  // pick — any corridor hit tunes the single Isoradio preset. Coverage:
+  // the France→Italy entry routes (A10 coast, A32 Fréjus, A5 Mont Blanc),
+  // the northern spine (A4, A7), the Milan–Naples A1, the Ligurian/Tyrrhenian
+  // A12, the Adriatic A14 and the Brenner A22.
+  const ISORADIO_ROUTES = {
+    'A1' :[[45.38,9.30],[45.05,9.68],[44.85,10.05],[44.76,10.32],[44.66,10.65],[44.60,10.92],[44.51,11.28],[44.40,11.28],[44.20,11.22],[44.00,11.23],[43.83,11.16],[43.77,11.17],[43.72,11.22],[43.66,11.34],[43.62,11.47],[43.52,11.62],[43.42,11.82],[43.20,11.95],[43.02,11.95],[42.85,12.05],[42.72,12.12],[42.55,12.30],[42.46,12.40],[42.28,12.52],[42.10,12.62],[41.94,12.65],[41.82,12.80],[41.72,12.95],[41.62,13.32],[41.48,13.65],[41.42,13.85],[41.28,14.05],[41.10,14.25],[40.92,14.30]],
+    'A4' :[[45.10,7.72],[45.24,7.97],[45.36,8.18],[45.45,8.62],[45.48,8.90],[45.52,9.12],[45.57,9.35],[45.68,9.63],[45.57,9.98],[45.52,10.18],[45.46,10.55],[45.41,10.83],[45.39,10.98],[45.40,11.24],[45.51,11.50],[45.44,11.85],[45.48,12.15],[45.63,12.58],[45.77,12.83],[45.90,13.32],[45.80,13.55],[45.68,13.75]],
+    'A5' :[[45.14,7.77],[45.32,7.86],[45.47,7.88],[45.60,7.80],[45.67,7.69],[45.73,7.42],[45.74,7.20],[45.80,6.97]],
+    'A32':[[45.07,7.58],[45.10,7.40],[45.12,7.24],[45.14,7.05],[45.07,6.88],[45.08,6.70]],
+    'A10':[[43.79,7.57],[43.82,7.78],[43.90,8.02],[43.96,8.15],[44.06,8.22],[44.18,8.33],[44.30,8.45],[44.37,8.58],[44.40,8.70],[44.42,8.88]],
+    'A7' :[[44.45,8.92],[44.57,8.95],[44.72,8.86],[44.90,8.87],[45.10,8.95],[45.25,9.02],[45.38,9.13]],
+    'A12':[[44.40,9.02],[44.35,9.16],[44.32,9.32],[44.27,9.42],[44.20,9.65],[44.13,9.85],[44.07,10.00],[44.03,10.13],[43.88,10.26],[43.72,10.38],[43.53,10.35],[43.40,10.45]],
+    'A14':[[44.49,11.40],[44.36,11.72],[44.22,12.06],[44.13,12.28],[44.06,12.53],[43.96,12.73],[43.88,12.92],[43.70,13.20],[43.55,13.45],[43.43,13.62],[43.28,13.72],[43.18,13.80],[42.93,13.88],[42.75,13.97],[42.52,14.15],[42.35,14.38],[42.12,14.70],[41.98,15.00],[41.70,15.38],[41.50,15.55],[41.30,15.90],[41.25,16.30],[41.10,16.75]],
+    'A22':[[44.63,10.94],[44.90,10.90],[45.14,10.80],[45.38,10.92],[45.55,10.78],[45.75,10.95],[45.88,11.02],[46.06,11.10],[46.19,11.13],[46.45,11.30],[46.52,11.35],[46.64,11.57],[46.70,11.63],[46.79,11.60],[46.90,11.43],[47.00,11.50]]
+  };
+
+  // Each network: its corridors, how to recognise its own station (so a
+  // manual change isn't fought), and which preset to tune when entered.
+  const NETWORKS = {
+    sanef: {
+      label: 'Sanef 107.7',
+      routes: SANEF_ROUTES,
+      match: s => /sanef/i.test(s.name||''),
+      stationIndex: (lat,lon) => sanefStationIndex(lat,lon)
+    },
+    isoradio: {
+      label: 'Rai Isoradio',
+      routes: ISORADIO_ROUTES,
+      match: s => s.id==='isoradio' || /isoradio/i.test(s.name||''),
+      stationIndex: () => stations.findIndex(s => s.id==='isoradio' || /isoradio/i.test(s.name||''))
+    }
+  };
+
   const ENTER_KM = 3, EXIT_KM = 7;
 
   let geoAuto = false;     // user setting
   let geoWatch = null;     // watchPosition id
-  let onSanef = false;     // currently inside a corridor
+  let onNet = null;        // network key ('sanef' | 'isoradio') we're inside, or null
   let insideHits = 0, outsideHits = 0;
   let returnTo = null;     // station id to restore on exit
   let autoTuning = false;  // true while the app (not the user) changes station
@@ -889,15 +958,18 @@
     t=Math.max(0,Math.min(1,t));
     return Math.hypot(x-(x1+t*dx), y-(y1+t*dy))*111.32;
   }
-  function nearestRoute(lat,lon){
-    let best={km:Infinity, route:null};
-    for(const [route,pts] of Object.entries(SANEF_ROUTES)){
-      for(let i=0;i<pts.length-1;i++){
-        const a=pts[i], b=pts[i+1];
-        if(Math.abs(a[0]-lat)>1.2 && Math.abs(b[0]-lat)>1.2) continue;  // cheap prefilter
-        if(Math.abs(a[1]-lon)>1.8 && Math.abs(b[1]-lon)>1.8) continue;
-        const km=segKm(lat,lon,a,b);
-        if(km<best.km) best={km,route};
+  function nearestRoute(lat,lon,onlyNet){
+    let best={km:Infinity, route:null, net:null};
+    for(const [net,cfg] of Object.entries(NETWORKS)){
+      if(onlyNet && net!==onlyNet) continue;
+      for(const [route,pts] of Object.entries(cfg.routes)){
+        for(let i=0;i<pts.length-1;i++){
+          const a=pts[i], b=pts[i+1];
+          if(Math.abs(a[0]-lat)>1.2 && Math.abs(b[0]-lat)>1.2) continue;  // cheap prefilter
+          if(Math.abs(a[1]-lon)>1.8 && Math.abs(b[1]-lon)>1.8) continue;
+          const km=segKm(lat,lon,a,b);
+          if(km<best.km) best={km,route,net};
+        }
       }
     }
     return best;
@@ -912,27 +984,33 @@
   function geoTick(pos){
     const lat=pos.coords.latitude, lon=pos.coords.longitude;
     lastFix={lat,lon};
-    const n=nearestRoute(lat,lon);
-    if(!onSanef){
-      if(n.km<=ENTER_KM){ insideHits++; outsideHits=0; if(insideHits>=2) enterSanef(lat,lon,n.route); }
+    if(!onNet){
+      const n=nearestRoute(lat,lon);
+      if(n.km<=ENTER_KM){ insideHits++; outsideHits=0; if(insideHits>=2) enterNetwork(n.net,lat,lon,n.route); }
       else insideHits=0;
+      renderGeoChip(n);
     }else{
-      if(n.km>=EXIT_KM){ outsideHits++; insideHits=0; if(outsideHits>=2) exitSanef(); }
+      // exit hysteresis is measured against the network we're on, so a
+      // corridor of the OTHER country's network can never mask leaving
+      const n=nearestRoute(lat,lon,onNet);
+      if(n.km>=EXIT_KM){ outsideHits++; insideHits=0; if(outsideHits>=2) exitNetwork(); }
       else outsideHits=0;
+      renderGeoChip(n);
     }
-    renderGeoChip(n);
   }
 
-  function enterSanef(lat,lon,route){
-    onSanef=true;
-    const i=sanefStationIndex(lat,lon);
-    if(i<0 || i===current){ renderGeoChip({km:0,route}); return; }
+  function enterNetwork(net,lat,lon,route){
+    onNet=net;
+    const i=NETWORKS[net].stationIndex(lat,lon);
+    if(i<0 || i===current){ renderGeoChip({km:0,route,net}); return; }
     returnTo = stations[current].id;
     autoTuning=true; tune(i, wantPlaying); autoTuning=false;
   }
-  function exitSanef(){
-    onSanef=false;
-    if(returnTo && /sanef/i.test(stations[current]?.name||'')){
+  function exitNetwork(){
+    const net=onNet; onNet=null;
+    // only auto-return if we're still on that network's own station —
+    // a manual change made inside the corridor wins over the auto-return
+    if(returnTo && net && NETWORKS[net].match(stations[current]||{})){
       const i=stations.findIndex(s=>s.id===returnTo);
       if(i>=0){ autoTuning=true; tune(i, wantPlaying); autoTuning=false; }
     }
@@ -947,7 +1025,7 @@
     const c=$('geoStatus');
     if(!c) return;
     if(!geoAuto){ c.className=''; c.textContent=''; return; }
-    if(onSanef){ c.className='on'; c.textContent='● On Sanef network'+(n&&n.route?' · '+n.route:''); }
+    if(onNet){ c.className='on'; c.textContent='● On '+NETWORKS[onNet].label+(n&&n.route?' · '+n.route:''); }
     else if(!lastFix){ c.className=''; c.textContent='○ Armed · waiting for GPS…'; }
     else { c.className=''; c.textContent='○ Armed'; }
   }
@@ -964,7 +1042,7 @@
   }
   function stopGeo(){
     if(geoWatch!=null){ navigator.geolocation.clearWatch(geoWatch); geoWatch=null; }
-    onSanef=false; insideHits=outsideHits=0; returnTo=null; lastFix=null;
+    onNet=null; insideHits=outsideHits=0; returnTo=null; lastFix=null;
     renderGeoChip(null);
   }
   function renderGeoToggle(){
@@ -1005,6 +1083,37 @@
     play();                                              // intent says play but we're paused → reconnect live
   }
 
+  /* iOS gap the above doesn't cover: during a phone call the page often STAYS
+     visible (the call is just a banner/island), so NO visibilitychange or
+     focus event ever fires when the call ends — which is why playback never
+     resumed. What DOES fire, reliably and immediately, is 'pause' on the
+     <audio> element the moment the OS takes audio focus. So: on any pause we
+     didn't ask for, start polling — retry a full live reconnect every few
+     seconds until the OS gives audio back (play() finally succeeds) or the
+     user hits stop. Each retry goes through app-level play(), so we resume
+     LIVE from a fresh connection, never a stale mid-call buffer. */
+  let resumePoll = null;
+  function armResumePoll(){
+    if(resumePoll) return;
+    resumePoll = setInterval(()=>{
+      if(!wantPlaying){ stopResumePoll(); return; }
+      if(!player.paused){ stopResumePoll(); return; }       // audio is back — done
+      if(reconnectTimer || bufferWatch) return;             // network recovery already owns this failure
+      if(document.visibilityState !== 'visible') return;    // throttled anyway; foreground handlers cover the return
+      play();
+    }, 3000);
+  }
+  function stopResumePoll(){
+    if(resumePoll){ clearInterval(resumePoll); resumePoll = null; }
+  }
+  player.addEventListener('pause', ()=>{
+    // stop() flips wantPlaying to false BEFORE pausing, so a user-initiated
+    // pause never lands here. Anything else pausing us — an incoming or
+    // outgoing call, Siri, another app grabbing audio focus, an OS resource
+    // reclaim — does, and gets the resume poller.
+    if(wantPlaying) armResumePoll();
+  });
+
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState !== 'visible') return;
     resumeIfNeeded();
@@ -1026,7 +1135,7 @@
     current = idx >= 0 ? idx : stations.findIndex(s => s.id === defaultId);
     if(current < 0) current = 0;
 
-    save();   // persist the migrated list (CBN added, Absolute 90s removed) right away
+    save();   // persist the migrated list (Rai Isoradio added, Absolute/Virgin presets removed, Sanef labels refreshed) right away
     renderPresets();
     renderNow();
     renderGeoToggle();
