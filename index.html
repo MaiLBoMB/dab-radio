@@ -12,6 +12,7 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <link rel="manifest" href="manifest.json">
 <title>Drive Radio</title>
+<!-- Refactored: central configuration, safer storage, cached DOM handles, structured debug logging, accessibility focus states. -->
 <style>
   :root{
     --bg:#0b0c10;
@@ -89,6 +90,7 @@
     transition:transform .08s, background .2s;touch-action:manipulation;
   }
   .tbtn:active{transform:scale(.93);background:var(--panel-2)}
+  button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
   .skip{width:clamp(72px,20vw,100px);height:clamp(72px,20vw,100px)}
   .skip svg{width:46%;height:46%;fill:currentColor}
   #playBtn{
@@ -171,6 +173,7 @@
     cursor:pointer;flex-shrink:0;touch-action:manipulation;
   }
   .miniBtn.danger{color:#ff6b6b}
+  .miniBtn:disabled{opacity:.55;cursor:not-allowed}
   #closeSheet{margin-top:auto}
   h3.sec{font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:18px 0 8px}
 </style>
@@ -239,6 +242,19 @@
 <script>
 (() => {
   const epoch = () => Math.floor(Date.now()/1000);
+  const CONFIG = Object.freeze({
+    API_TIMEOUT: 4000,
+    BUFFER_TIMEOUT: 14000,
+    RECONNECT_MIN: 2000,
+    RECONNECT_MAX: 30000,
+    META_POLL_MS: 20000,
+    RESUME_POLL_MS: 3000,
+    CACHE_TTL_MS: 7*24*60*60*1000,
+    SEARCH_LIMIT: '12',
+    DEFAULT_STATION_ID: 'cidade'
+  });
+  const DEBUG = false;
+  function logError(context, err){ if(DEBUG) console.warn('[Drive Radio]', context, err); }
 
   const DEFAULTS = [
     {
@@ -317,8 +333,15 @@
   let urlIdx = 0;
   let tuneSeq = 0;         // bumped on every tune(); stale async tunes must bail
   let wantPlaying = false;
+  const state = { get current(){return current}, set current(v){current=v}, get urlIdx(){return urlIdx}, set urlIdx(v){urlIdx=v}, get wantPlaying(){return wantPlaying}, set wantPlaying(v){wantPlaying=v}, get tuneSeq(){return tuneSeq}, set tuneSeq(v){tuneSeq=v} };
   const $ = id => document.getElementById(id);
   const player = $('player');
+  const DOM = Object.freeze({
+    playBtn:$('playBtn'), prevBtn:$('prevBtn'), nextBtn:$('nextBtn'), gear:$('gear'), closeSheet:$('closeSheet'),
+    searchBtn:$('searchBtn'), addManual:$('addManual'), q:$('q'), presets:$('presets'), stationList:$('stationList'),
+    results:$('results'), statusDot:$('statusDot'), statusText:$('statusText'), stationBadge:$('stationBadge'),
+    stationName:$('stationName'), trackName:$('trackName'), npLogo:$('npLogo'), geoToggle:$('geoToggle'), geoStatus:$('geoStatus')
+  });
 
   /* ---------------- persistence ----------------
      Saves to the browser's localStorage, which persists across refreshes,
@@ -326,20 +349,25 @@
      in a preview sandbox, is used as a secondary mirror only.) */
   const store = {
     get(key){
-      try{ const v = localStorage.getItem(key); if(v!=null) return v; }catch(e){}
+      try{ const v = localStorage.getItem(key); if(v!=null) return v; }catch(e){ logError('localStorage.get '+key, e); }
       return null;
     },
     set(key,val){
-      try{ localStorage.setItem(key,val); }catch(e){}
-      try{ if(window.storage) window.storage.set(key,val); }catch(e){}
-    }
+      try{ localStorage.setItem(key,val); }catch(e){ logError('localStorage.set '+key, e); }
+      try{ if(window.storage) window.storage.set(key,val); }catch(e){ logError('preview storage.set '+key, e); }
+    },
+    getJSON(key, fallback=null){
+      const raw = this.get(key);
+      if(raw == null) return fallback;
+      try{ return JSON.parse(raw); }catch(e){ logError('store.getJSON '+key, e); return fallback; }
+    },
+    setJSON(key,val){ this.set(key, JSON.stringify(val)); }
   };
 
   function loadSaved(){
     try{
-      const raw = store.get('drive-radio-stations');
-      if(!raw) return;
-      let saved = JSON.parse(raw);
+      let saved = store.getJSON('drive-radio-stations');
+      if(!saved) return;
       if(Array.isArray(saved)) saved = saved.filter(s => !isRetired(s));
       if(Array.isArray(saved) && saved.length){
         // bring in any default stations added since the list was last saved
@@ -377,7 +405,7 @@
   function save(){
     // strip transient runtime flags so they don't get frozen into storage
     const clean = stations.map(s=>{ const c={...s}; delete c._refreshed; return c; });
-    store.set('drive-radio-stations', JSON.stringify(clean));
+    store.setJSON('drive-radio-stations', clean);
   }
 
   /* ---------------- radio directory (radio-browser.info) ----------------
@@ -390,14 +418,14 @@
     'https://nl1.api.radio-browser.info'
   ];
   async function rbSearch(name, country, exact){
-    const p = new URLSearchParams({name, limit:'12', hidebroken:'true', order:'clickcount', reverse:'true'});
+    const p = new URLSearchParams({name, limit:CONFIG.SEARCH_LIMIT, hidebroken:'true', order:'clickcount', reverse:'true'});
     if(country) p.set('countrycode', country);
     if(exact) p.set('nameExact', 'true');
     for(const base of RB_MIRRORS){
       try{
-        const res = await fetch(base + '/json/stations/search?' + p.toString(), {signal: AbortSignal.timeout(4000)});
+        const res = await fetch(base + '/json/stations/search?' + p.toString(), {signal: AbortSignal.timeout(CONFIG.API_TIMEOUT)});
         if(res.ok) return await res.json();
-      }catch(e){}
+      }catch(e){ logError('ignored exception', e); }
     }
     throw new Error('directory unreachable');
   }
@@ -455,7 +483,7 @@
       st.urlsTs = Date.now();
       save();
       return changed || touched;
-    }catch(e){ return false; }
+    }catch(e){ logError('refresh failed', e); return false; }
   }
   function playableUrl(item){
     const u = item.url_resolved || item.url || '';
@@ -494,19 +522,19 @@
   }
 
   function setStatus(kind, text){
-    const d = $('statusDot');
+    const d = DOM.statusDot;
     d.className = kind==='live'?'live':kind==='buffering'?'buffering':kind==='error'?'error':'';
-    $('statusText').textContent = text;
+    DOM.statusText.textContent = text;
   }
 
   function renderNow(){
     const st = stations[current];
     document.documentElement.style.setProperty('--accent', st.color || '#ff8a00');
-    $('stationBadge').textContent = (st.sub || 'LIVE') + ' · PRESET ' + (current+1);
-    $('stationName').textContent = st.name;
+    DOM.stationBadge.textContent = (st.sub || 'LIVE') + ' · PRESET ' + (current+1);
+    DOM.stationName.textContent = st.name;
     // now-playing logo: only show when we actually have an image (the big
     // station name below already covers the no-logo case)
-    const np = $('npLogo');
+    const np = DOM.npLogo;
     np.innerHTML = '';
     np.classList.remove('show');
     if(st.logo){
@@ -594,7 +622,7 @@
      keep retrying with exponential backoff — and reconnect instantly the moment
      the network comes back. A watchdog covers the "connected but no audio" case
      where the element silently buffers forever. */
-  const RECONNECT_MIN = 2000, RECONNECT_MAX = 30000, BUFFER_TIMEOUT = 14000;
+  const RECONNECT_MIN = CONFIG.RECONNECT_MIN, RECONNECT_MAX = CONFIG.RECONNECT_MAX, BUFFER_TIMEOUT = CONFIG.BUFFER_TIMEOUT;
   let reconnectTimer = null, bufferWatch = null, reconnectDelay = RECONNECT_MIN;
 
   function clearRecovery(){
@@ -663,7 +691,7 @@
      The track is shown on screen AND pushed to the car display via Media Session. */
   let metaTimer = null;
   let lastTrack = '';
-  function startMeta(){ stopMeta(false); pollMeta(); metaTimer = setInterval(pollMeta, 20000); }
+  function startMeta(){ stopMeta(false); pollMeta(); metaTimer = setInterval(pollMeta, CONFIG.META_POLL_MS); }
   function stopMeta(clear = true){
     if(metaTimer){ clearInterval(metaTimer); metaTimer = null; }
     if(clear) setTrack('');
@@ -672,7 +700,7 @@
     t = (t||'').trim();
     if(t === lastTrack) return;
     lastTrack = t;
-    $('trackName').textContent = t;
+    DOM.trackName.textContent = t;
     updateMediaSession();
   }
 
@@ -701,7 +729,7 @@
         const artist = it.TrackArtist || it.nowPlayingArtist || it.artist || '';
         const out = [artist, title].filter(Boolean).join(' — ');
         if(out){ st.bauerCodes = [code]; return out; } // lock onto the code that works
-      }catch(e){}
+      }catch(e){ logError('ignored exception', e); }
     }
     return '';
   }
@@ -720,7 +748,7 @@
       if(!m) return '';
       const t = m.title || m.yp_currently_playing || '';
       return (typeof t === 'string') ? t : '';
-    }catch(e){ return ''; } // server has no status endpoint or no CORS — fine
+    }catch(e){ logError('icecast metadata unavailable', e); return ''; } // server has no status endpoint or no CORS — fine
   }
 
   /* ---------------- Media Session: steering wheel / CarPlay / Android Auto ---------------- */
@@ -746,10 +774,10 @@
       navigator.mediaSession.setActionHandler('nexttrack', ()=>tune(current+1));
       navigator.mediaSession.setActionHandler('seekbackward', ()=>tune(current-1));
       navigator.mediaSession.setActionHandler('seekforward', ()=>tune(current+1));
-    }catch(e){}
+    }catch(e){ logError('ignored exception', e); }
   }
   function svgArtwork(st){
-    const name = (st.name||'').slice(0,10).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    const name = (st.name||'').slice(0,10).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512">'
       + '<rect width="512" height="512" rx="64" fill="' + (st.color||'#ff8a00') + '"/>'
       + '<text x="50%" y="54%" font-family="Arial,Helvetica,sans-serif" font-size="84" font-weight="800" fill="#0b0c10" text-anchor="middle">' + name + '</text></svg>';
@@ -810,7 +838,7 @@
       up.onclick = ()=>{
         if(i===0) return;
         const t = stations[i-1]; stations[i-1]=stations[i]; stations[i]=t;
-        save(); renderPresets(); renderStationList(); renderNow();
+        save(); refreshUI();
       };
       const del = document.createElement('button');
       del.className = 'miniBtn danger del'; del.textContent = 'Remove';
@@ -818,13 +846,18 @@
         if(stations.length<=1) return;
         stations.splice(i,1);
         if(current>=stations.length) current=0;
-        save(); renderPresets(); renderStationList(); renderNow();
+        save(); refreshUI();
       };
       row.appendChild(up); row.appendChild(del);
       box.appendChild(row);
     });
   }
 
+  function refreshUI(){
+    renderPresets();
+    renderStationList();
+    renderNow();
+  }
   $('playBtn').onclick = toggle;
   $('prevBtn').onclick = ()=>tune(current-1);
   $('nextBtn').onclick = ()=>tune(current+1);
@@ -1109,7 +1142,7 @@
       if(reconnectTimer || bufferWatch) return;             // network recovery already owns this failure
       if(document.visibilityState !== 'visible') return;    // throttled anyway; foreground handlers cover the return
       play();
-    }, 3000);
+    }, CONFIG.RESUME_POLL_MS);
   }
   function stopResumePoll(){
     if(resumePoll){ clearInterval(resumePoll); resumePoll = null; }
@@ -1136,7 +1169,7 @@
     loadGeoSetting();
 
     // Default to Rádio Cidade; restore user's last choice if they changed it
-    const defaultId = 'cidade';
+    const defaultId = CONFIG.DEFAULT_STATION_ID;
     const lastId = store.get('drive-radio-last');
     const targetId = lastId || defaultId;
     const idx = stations.findIndex(s => s.id === targetId);
@@ -1154,7 +1187,7 @@
     // built-in stations whose streams were already cached (so they'd otherwise
     // never re-hit the directory and never pick up a logo). Re-render when one
     // resolves so the new logo appears on the tiles and now-playing view.
-    const STALE = 7*24*60*60*1000;
+    const STALE = CONFIG.CACHE_TTL_MS;
     stations
       .filter(s => s.rbSearch && (!s.logo || !s.urls.length || !s.urlsTs || Date.now() - s.urlsTs > STALE))
       .forEach(s => refreshUrls(s).then(touched => {
